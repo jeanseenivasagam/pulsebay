@@ -378,10 +378,19 @@ function pdfEscape(input: string): string {
     .replace(/[—–·•]/g, '-')
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
+    .replace(/[\r\n\t]+/g, ' ')
     .replace(/[^\x20-\x7e]/g, ' ')
     .replace(/\\/g, '\\\\')
     .replace(/\(/g, '\\(')
     .replace(/\)/g, '\\)');
+}
+
+function compactNotes(notes: string): string {
+  return notes
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(' | ');
 }
 
 function truncate(input: string, max: number): string {
@@ -393,15 +402,34 @@ export function buildPdfBytes(bookings: readonly Booking[], scopeLabel: string):
   const pageH = 612;
   const margin = 36;
   const contentW = pageW - margin * 2;
+  const footerLimitY = 46;
+  const baseRowH = 22;
+  const noteExtraH = 13;
   const generatedAt = new Date().toISOString().slice(0, 16).replace('T', ' ');
+
+  const rowHeightFor = (b: Booking): number =>
+    compactNotes(b.protocolNotes).length > 0 ? baseRowH + noteExtraH : baseRowH;
 
   const pagesRows: Booking[][] = [];
   if (bookings.length === 0) {
     pagesRows.push([]);
   } else {
-    pagesRows.push(bookings.slice(0, 16));
-    for (let i = 16; i < bookings.length; i += 19) {
-      pagesRows.push(bookings.slice(i, i + 19));
+    const page1Capacity = pageH - margin - 54 - 14 - 44 - 16 - 24 - footerLimitY;
+    const nextCapacity = pageH - margin - 54 - 18 - 24 - footerLimitY;
+    let current: Booking[] = [];
+    let remaining = page1Capacity;
+    for (const b of bookings) {
+      const h = rowHeightFor(b);
+      if (current.length > 0 && h > remaining) {
+        pagesRows.push(current);
+        current = [];
+        remaining = nextCapacity;
+      }
+      current.push(b);
+      remaining -= h;
+    }
+    if (current.length > 0) {
+      pagesRows.push(current);
     }
   }
 
@@ -484,7 +512,6 @@ export function buildPdfBytes(bookings: readonly Booking[], scopeLabel: string):
       text('F2', 8.5, cx, headerY + 8, 1, 1, 1, label);
     }
 
-    const rowH = 23;
     if (rows.length === 0) {
       text(
         'F1',
@@ -497,15 +524,19 @@ export function buildPdfBytes(bookings: readonly Booking[], scopeLabel: string):
         'No scheduled bookings matched the selected export filter.'
       );
     } else {
+      let cursorY = headerY;
       rows.forEach((b, idx) => {
-        const ry = headerY - rowH * (idx + 1);
+        const notesClean = compactNotes(b.protocolNotes);
+        const hasNotes = notesClean.length > 0;
+        const rowH = hasNotes ? baseRowH + noteExtraH : baseRowH;
+        const ry = cursorY - rowH;
         if (idx % 2 === 1) {
           rect(margin, ry, contentW, rowH, 0.957, 0.973, 0.984);
         }
         rect(margin, ry, contentW, 0.6, 0.827, 0.882, 0.918);
         const dept = getDepartment(b.departmentId);
         const spec = getSpecialist(b.specialistId);
-        const ty = ry + 7.5;
+        const ty = hasNotes ? ry + 19.5 : ry + 7.5;
         text('F3', 8, cols[0][1], ty, 0.086, 0.149, 0.231, truncate(b.referenceCode, 14));
         text('F1', 8.5, cols[1][1], ty, 0.12, 0.2, 0.3, truncate(`${b.date} ${formatSlotLabel(b.startTime)}`, 20));
         text('F2', 8.8, cols[2][1], ty, 0.086, 0.149, 0.231, truncate(b.visitorName, 22));
@@ -513,6 +544,13 @@ export function buildPdfBytes(bookings: readonly Booking[], scopeLabel: string):
         text('F1', 8.5, cols[4][1], ty, 0.18, 0.28, 0.39, truncate(spec.name, 20));
         text('F2', 8.2, cols[5][1], ty, 0.55, 0.32, 0.05, priorityLabel(b.priority));
         text('F2', 8.2, cols[6][1], ty, 0.059, 0.48, 0.42, statusLabel(b.status));
+
+        if (hasNotes) {
+          text('F2', 7.5, cols[0][1], ry + 6, 0.24, 0.36, 0.48, 'Checklist / Notes:');
+          text('F1', 7.6, cols[1][1], ry + 6, 0.28, 0.38, 0.48, truncate(notesClean, 118));
+        }
+
+        cursorY = ry;
       });
     }
 

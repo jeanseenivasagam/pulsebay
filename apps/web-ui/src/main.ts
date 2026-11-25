@@ -29,6 +29,21 @@ import type {
 type ActiveTab = 'calendar' | 'roster' | 'export';
 type ExportScope = 'selected-day' | 'current-month' | 'roster-filter' | 'all';
 
+interface BookingDraft {
+  visitorName: string;
+  visitorEmail: string;
+  visitorPhone: string;
+  durationMins: number;
+  priority: Priority;
+  protocolNotes: string;
+}
+
+interface FieldErrors {
+  visitorName?: string;
+  visitorEmail?: string;
+  general?: string;
+}
+
 interface AppState {
   runtime: RuntimeInfo;
   activeTab: ActiveTab;
@@ -39,13 +54,100 @@ interface AppState {
   selectedDepartmentId: string;
   selectedSpecialistId: string;
   selectedSlot: string;
+  bookingDraft: BookingDraft;
+  fieldErrors: FieldErrors;
   confirmedBooking: Booking | null;
-  formError: string | null;
   rosterFilter: BookingFilter;
   exportScope: ExportScope;
   rescheduleTargetId: string | null;
+  notesTargetId: string | null;
   toast: { message: string; isError?: boolean } | null;
   aboutOpen: boolean;
+}
+
+const DEPARTMENT_CHECKLISTS: Record<string, readonly string[]> = {
+  'intake-bay': [
+    'Photo ID & intake form verified',
+    'Baseline vitals recorded',
+    'Medication & allergy list reviewed',
+    'Triage routing confirmed',
+  ],
+  'diagnostics-lab': [
+    'Fasting / pre-test prep confirmed',
+    'Specimen labels double-checked',
+    'On-site panel run initiated',
+    'Readout follow-up scheduled',
+  ],
+  'therapy-suite': [
+    'Range-of-motion baseline logged',
+    'Equipment & bay sanitized',
+    'Home mobility drills assigned',
+    'Progress metrics documented',
+  ],
+  'express-review': [
+    'Prior lab/Rx chart reviewed',
+    'Clearance criteria verified',
+    'Prescription renewal signed',
+    'Written summary handed over',
+  ],
+};
+
+function defaultDraft(durationMins = DEPARTMENTS[0].defaultDurationMins): BookingDraft {
+  return {
+    visitorName: '',
+    visitorEmail: '',
+    visitorPhone: '',
+    durationMins,
+    priority: 'routine',
+    protocolNotes: '',
+  };
+}
+
+function parseProtocolNotes(
+  departmentId: string,
+  rawNotes: string
+): { checked: Set<string>; freeNotes: string } {
+  const templates = DEPARTMENT_CHECKLISTS[departmentId] ?? DEPARTMENT_CHECKLISTS['intake-bay'];
+  const checked = new Set<string>();
+  const remainingLines: string[] = [];
+
+  for (const line of rawNotes.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('Checklist:')) {
+      const body = trimmed.slice('Checklist:'.length).trim();
+      for (const item of body.split(';')) {
+        const clean = item.trim();
+        if (clean.startsWith('[x]') || clean.startsWith('[X]')) {
+          const label = clean.slice(3).trim();
+          if (templates.includes(label)) {
+            checked.add(label);
+          }
+        }
+      }
+      continue;
+    }
+    if (trimmed.startsWith('Visit Notes:')) {
+      const rest = trimmed.slice('Visit Notes:'.length).trim();
+      if (rest) remainingLines.push(rest);
+      continue;
+    }
+    remainingLines.push(line);
+  }
+
+  return { checked, freeNotes: remainingLines.join('\n').trim() };
+}
+
+function formatProtocolNotes(checkedItems: string[], freeNotes: string): string {
+  const parts: string[] = [];
+  if (checkedItems.length > 0) {
+    parts.push(`Checklist: ${checkedItems.map((item) => `[x] ${item}`).join('; ')}`);
+  }
+  const cleanNotes = freeNotes.trim();
+  if (cleanNotes) {
+    parts.push(checkedItems.length > 0 ? `Visit Notes: ${cleanNotes}` : cleanNotes);
+  }
+  return parts.join('\n');
 }
 
 const todayIso = toIsoDate(new Date());
@@ -65,11 +167,13 @@ const state: AppState = {
   selectedDepartmentId: DEPARTMENTS[0].id,
   selectedSpecialistId: SPECIALISTS[0].id,
   selectedSlot: '',
+  bookingDraft: defaultDraft(DEPARTMENTS[0].defaultDurationMins),
+  fieldErrors: {},
   confirmedBooking: null,
-  formError: null,
   rosterFilter: {},
   exportScope: 'all',
   rescheduleTargetId: null,
+  notesTargetId: null,
   toast: null,
   aboutOpen: false,
 };
@@ -231,7 +335,9 @@ function renderTopbar(): string {
 }
 
 function renderDemoBanner(): string {
-  if (state.runtime.mode === 'desktop') return '';
+  if (state.runtime.mode === 'desktop' || document.documentElement.dataset.runtime === 'desktop') {
+    return '';
+  }
   return `
     <div class="demo-banner">
       <div class="demo-banner__inner">
@@ -411,6 +517,8 @@ function renderSlotPickerAndForm(): string {
   const specialist = getSpecialist(state.selectedSpecialistId);
   const slots = computeDaySlots(state.bookings, state.selectedSpecialistId, state.selectedDate);
   const openCount = slots.filter((s) => s.available).length;
+  const draft = state.bookingDraft;
+  const errs = state.fieldErrors;
 
   const slotButtons = slots
     .map((slot) => {
@@ -511,12 +619,21 @@ function renderSlotPickerAndForm(): string {
             <input
               id="visitor-name"
               name="visitorName"
-              class="input"
+              class="input ${errs.visitorName ? 'input--invalid' : ''}"
               type="text"
+              value="${esc(draft.visitorName)}"
               placeholder="e.g. Morgan Patel"
               required
               autocomplete="name"
+              aria-invalid="${errs.visitorName ? 'true' : 'false'}"
+              ${errs.visitorName ? 'aria-describedby="visitor-name-error"' : ''}
+              data-draft-field="visitorName"
             />
+            ${
+              errs.visitorName
+                ? `<p id="visitor-name-error" class="field-error" role="alert">${esc(errs.visitorName)}</p>`
+                : ''
+            }
           </div>
 
           <div class="field">
@@ -524,12 +641,21 @@ function renderSlotPickerAndForm(): string {
             <input
               id="visitor-email"
               name="visitorEmail"
-              class="input"
+              class="input ${errs.visitorEmail ? 'input--invalid' : ''}"
               type="email"
+              value="${esc(draft.visitorEmail)}"
               placeholder="morgan.patel@example.org"
               required
               autocomplete="email"
+              aria-invalid="${errs.visitorEmail ? 'true' : 'false'}"
+              ${errs.visitorEmail ? 'aria-describedby="visitor-email-error"' : ''}
+              data-draft-field="visitorEmail"
             />
+            ${
+              errs.visitorEmail
+                ? `<p id="visitor-email-error" class="field-error" role="alert">${esc(errs.visitorEmail)}</p>`
+                : ''
+            }
           </div>
 
           <div class="field">
@@ -539,26 +665,28 @@ function renderSlotPickerAndForm(): string {
               name="visitorPhone"
               class="input"
               type="tel"
+              value="${esc(draft.visitorPhone)}"
               placeholder="+1 555-0190"
               autocomplete="tel"
+              data-draft-field="visitorPhone"
             />
           </div>
 
           <div class="field">
             <label for="booking-duration">Session length</label>
-            <select id="booking-duration" name="durationMins" class="select">
-              <option value="30" ${dept.defaultDurationMins === 30 ? 'selected' : ''}>30 minutes</option>
-              <option value="45" ${dept.defaultDurationMins === 45 ? 'selected' : ''}>45 minutes</option>
-              <option value="60" ${dept.defaultDurationMins === 60 ? 'selected' : ''}>60 minutes</option>
+            <select id="booking-duration" name="durationMins" class="select" data-draft-field="durationMins">
+              <option value="30" ${draft.durationMins === 30 ? 'selected' : ''}>30 minutes</option>
+              <option value="45" ${draft.durationMins === 45 ? 'selected' : ''}>45 minutes</option>
+              <option value="60" ${draft.durationMins === 60 ? 'selected' : ''}>60 minutes</option>
             </select>
           </div>
 
           <div class="field">
             <label for="booking-priority">Triage priority</label>
-            <select id="booking-priority" name="priority" class="select">
-              <option value="routine">Routine</option>
-              <option value="priority">Priority</option>
-              <option value="urgent">Urgent</option>
+            <select id="booking-priority" name="priority" class="select" data-draft-field="priority">
+              <option value="routine" ${draft.priority === 'routine' ? 'selected' : ''}>Routine</option>
+              <option value="priority" ${draft.priority === 'priority' ? 'selected' : ''}>Priority</option>
+              <option value="urgent" ${draft.priority === 'urgent' ? 'selected' : ''}>Urgent</option>
             </select>
           </div>
 
@@ -581,11 +709,12 @@ function renderSlotPickerAndForm(): string {
               name="protocolNotes"
               class="textarea"
               placeholder="List intake focus, diagnostic prep, or room requirements..."
-            ></textarea>
+              data-draft-field="protocolNotes"
+            >${esc(draft.protocolNotes)}</textarea>
           </div>
         </div>
 
-        ${state.formError ? `<div class="form-error" role="alert">${esc(state.formError)}</div>` : ''}
+        ${errs.general ? `<div class="form-error" role="alert">${esc(errs.general)}</div>` : ''}
 
         <div class="form-footer">
           <span class="selected-slot-pill tabular">
@@ -626,7 +755,7 @@ function renderSlotPickerAndForm(): string {
         <div class="slot-grid">${slotButtons}</div>
       </section>
 
-      <section class="console-card" aria-label="Booking details form">
+      <section class="console-card console-card--fill" aria-label="Booking details form">
         <div class="console-card__head">
           <div>
             <h2 class="console-card__title">Booking Intake Console</h2>
@@ -672,6 +801,8 @@ function renderRosterView(): string {
           .map((b) => {
             const dept = getDepartment(b.departmentId);
             const spec = getSpecialist(b.specialistId);
+            const hasNotes = b.protocolNotes.trim().length > 0;
+            const noteSnippet = b.protocolNotes.replace(/\s+/g, ' ').trim();
             return `
               <tr>
                 <td class="mono">${esc(b.referenceCode)}</td>
@@ -682,6 +813,11 @@ function renderRosterView(): string {
                 <td>
                   <strong>${esc(b.visitorName)}</strong><br />
                   <span style="color: var(--ink-muted); font-size: 0.82rem;">${esc(b.visitorEmail)}</span>
+                  ${
+                    hasNotes
+                      ? `<span class="notes-preview" title="${esc(noteSnippet)}">${esc(noteSnippet)}</span>`
+                      : ''
+                  }
                 </td>
                 <td>
                   <span class="wing-chip wing-chip--${dept.accentToken}">${dept.shortCode}</span>
@@ -695,6 +831,15 @@ function renderRosterView(): string {
                 </td>
                 <td>
                   <div class="row-actions">
+                    <button
+                      class="btn btn--secondary btn--sm btn--notes"
+                      type="button"
+                      data-open-notes="${esc(b.id)}"
+                      title="View or edit protocol checklist and visit notes"
+                    >
+                      ${hasNotes ? '<span class="notes-dot" aria-hidden="true"></span>' : ''}
+                      <span>Notes</span>
+                    </button>
                     ${
                       b.status === 'confirmed'
                         ? `<button class="btn btn--secondary btn--sm" type="button" data-set-status="${esc(b.id)}" data-next-status="checked_in">Check in</button>`
@@ -723,7 +868,7 @@ function renderRosterView(): string {
           .join('');
 
   return `
-    <section class="console-card" aria-label="Shift roster filters and records">
+    <section class="console-card console-card--fill" aria-label="Shift roster filters and records">
       <div class="console-card__head">
         <div>
           <h2 class="console-card__title">Shift Roster</h2>
@@ -743,7 +888,7 @@ function renderRosterView(): string {
         </div>
       </div>
 
-      <div class="filter-bar" style="margin-bottom: 1rem;">
+      <div class="filter-bar" style="margin-bottom: 0.75rem;">
         <div class="field">
           <label for="roster-search">Search visitor, ref, or notes</label>
           <div class="search-wrap">
@@ -803,7 +948,7 @@ function renderRosterView(): string {
             <tr>
               <th>Ref</th>
               <th>Date &amp; Time</th>
-              <th>Visitor</th>
+              <th>Visitor &amp; Notes</th>
               <th>Wing &amp; Specialist</th>
               <th>Priority</th>
               <th>Status</th>
@@ -822,13 +967,13 @@ function renderExportView(): string {
   const previewRows = scoped.bookings.slice(0, 6);
 
   return `
-    <div class="stack-col">
+    <div class="stack-col export-view-shell">
       <section class="console-card" aria-label="Export scope selection">
         <div class="console-card__head">
           <div>
             <h2 class="console-card__title">Multi-Format Export Studio</h2>
             <p class="console-card__desc">
-              Generate clean, ready-to-share reports in Excel (<code>.xlsx</code>), CSV (<code>.csv</code>), and PDF (<code>.pdf</code>).
+              Generate clean, ready-to-share reports in Excel (<code>.xlsx</code>), CSV (<code>.csv</code>), and PDF (<code>.pdf</code>)—including protocol checklists and visit notes.
             </p>
           </div>
           <span class="selected-slot-pill tabular">${scoped.bookings.length} records selected</span>
@@ -853,7 +998,7 @@ function renderExportView(): string {
       <section class="export-cards" aria-label="Export formats">
         <article class="export-card">
           <div>
-            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
               <span class="export-card__badge export-card__badge--xlsx">${ICONS.sheet}</span>
               <div>
                 <h3>Excel Workbook (.xlsx)</h3>
@@ -861,7 +1006,7 @@ function renderExportView(): string {
               </div>
             </div>
             <ul class="export-card__list">
-              <li><strong>Schedule</strong> tab with frozen cobalt header row &amp; formatted columns</li>
+              <li><strong>Schedule</strong> tab with frozen cobalt header &amp; full protocol notes</li>
               <li><strong>Summary</strong> tab with KPI totals &amp; department counts</li>
               <li>Opens natively in Excel, LibreOffice Calc, and Google Sheets</li>
             </ul>
@@ -874,7 +1019,7 @@ function renderExportView(): string {
 
         <article class="export-card">
           <div>
-            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
               <span class="export-card__badge export-card__badge--csv">${ICONS.list}</span>
               <div>
                 <h3>CSV Spreadsheet (.csv)</h3>
@@ -883,7 +1028,7 @@ function renderExportView(): string {
             </div>
             <ul class="export-card__list">
               <li>UTF-8 BOM encoded so Windows Excel renders names cleanly</li>
-              <li>Strict quoting for notes containing commas or line breaks</li>
+              <li>Strict quoting for protocol checklists &amp; multi-line visit notes</li>
               <li>Ready for BI dashboards, scripts, or database imports</li>
             </ul>
           </div>
@@ -895,7 +1040,7 @@ function renderExportView(): string {
 
         <article class="export-card">
           <div>
-            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
               <span class="export-card__badge export-card__badge--pdf">${ICONS.fileText}</span>
               <div>
                 <h3>PDF Schedule Report (.pdf)</h3>
@@ -904,8 +1049,8 @@ function renderExportView(): string {
             </div>
             <ul class="export-card__list">
               <li>PulseBay cobalt banner, scope stamp, and 5 KPI status cards</li>
-              <li>Clean tabular roster with automatic multi-page pagination</li>
-              <li>Zero external dependencies — generated locally in milliseconds</li>
+              <li>Includes protocol checklist &amp; visit notes beneath every row</li>
+              <li>Automatic multi-page pagination generated locally</li>
             </ul>
           </div>
           <button class="btn btn--coral" type="button" data-run-export="pdf">
@@ -915,7 +1060,7 @@ function renderExportView(): string {
         </article>
       </section>
 
-      <section class="console-card" aria-label="Export preview">
+      <section class="console-card console-card--fill" aria-label="Export preview">
         <div class="console-card__head">
           <div>
             <h3 class="console-card__title">Export Preview — ${esc(scoped.label)}</h3>
@@ -932,7 +1077,7 @@ function renderExportView(): string {
                 <th>Date &amp; Time</th>
                 <th>Visitor</th>
                 <th>Department</th>
-                <th>Specialist</th>
+                <th>Protocol Checklist &amp; Notes</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -943,14 +1088,15 @@ function renderExportView(): string {
                   : previewRows
                       .map((b) => {
                         const dept = getDepartment(b.departmentId);
-                        const spec = getSpecialist(b.specialistId);
                         return `
                           <tr>
                             <td class="mono">${esc(b.referenceCode)}</td>
                             <td class="tabular">${b.date} · ${formatSlotLabel(b.startTime)}</td>
                             <td><strong>${esc(b.visitorName)}</strong></td>
                             <td>${esc(dept.name)} (${dept.roomLabel})</td>
-                            <td>${esc(spec.name)}</td>
+                            <td><span class="notes-preview" style="margin-top: 0;">${esc(
+                              b.protocolNotes || '—'
+                            )}</span></td>
                             <td><span class="status-pill status-pill--${b.status}">${statusLabel(b.status)}</span></td>
                           </tr>
                         `;
@@ -1003,6 +1149,82 @@ function renderRescheduleModal(): string {
           <div class="form-footer">
             <button class="btn btn--secondary" type="button" data-close-reschedule>Cancel</button>
             <button class="btn btn--primary" type="submit">Save new time</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+  `;
+}
+
+function renderNotesModal(): string {
+  if (!state.notesTargetId) return '';
+  const target = state.bookings.find((b) => b.id === state.notesTargetId);
+  if (!target) return '';
+
+  const dept = getDepartment(target.departmentId);
+  const spec = getSpecialist(target.specialistId);
+  const checklistItems = DEPARTMENT_CHECKLISTS[target.departmentId] ?? DEPARTMENT_CHECKLISTS['intake-bay'];
+  const parsed = parseProtocolNotes(target.departmentId, target.protocolNotes);
+
+  return `
+    <dialog class="console-dialog" data-notes-dialog aria-label="Protocol checklist and visit notes">
+      <div class="dialog-body">
+        <div class="dialog-head">
+          <div>
+            <h3>Protocol Checklist &amp; Visit Notes</h3>
+            <p class="console-card__desc">
+              <span class="mono">${esc(target.referenceCode)}</span> · ${esc(target.visitorName)} · ${esc(dept.name)} (${esc(spec.name)})
+            </p>
+          </div>
+          <button class="btn btn--ghost btn--sm" type="button" data-close-notes aria-label="Close">
+            ${ICONS.x}
+          </button>
+        </div>
+
+        <form data-notes-form>
+          <div class="checklist-box" style="margin-bottom: 0.85rem;">
+            <span class="checklist-box__title">${esc(dept.name)} Protocol Checklist</span>
+            <div class="checklist-grid">
+              ${checklistItems
+                .map(
+                  (item) => `
+                    <label class="checklist-item">
+                      <input
+                        type="checkbox"
+                        name="checklistItem"
+                        value="${esc(item)}"
+                        ${parsed.checked.has(item) ? 'checked' : ''}
+                      />
+                      <span>${esc(item)}</span>
+                    </label>
+                  `
+                )
+                .join('')}
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="modal-visit-notes">Visit notes &amp; room instructions</label>
+            <textarea
+              id="modal-visit-notes"
+              name="freeNotes"
+              class="textarea"
+              style="min-height: 104px;"
+              placeholder="Record clinical intake details, prep instructions, or follow-up notes..."
+            >${esc(parsed.freeNotes)}</textarea>
+          </div>
+
+          <div class="form-footer">
+            <span style="font-size: 0.78rem; color: var(--ink-muted);">
+              Included automatically in Excel, CSV, and PDF exports.
+            </span>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn--secondary btn--sm" type="button" data-close-notes>Cancel</button>
+              <button class="btn btn--teal btn--sm" type="submit">
+                ${ICONS.checkCircle}
+                <span>Save notes</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -1118,6 +1340,7 @@ function render(): void {
       </main>
       ${renderFooter()}
       ${renderRescheduleModal()}
+      ${renderNotesModal()}
       ${renderAboutModal()}
       <div data-toast-host></div>
     </div>
@@ -1178,7 +1401,7 @@ function bindEvents(root: HTMLElement): void {
         state.viewMonth = m - 1;
       }
       state.confirmedBooking = null;
-      state.formError = null;
+      state.fieldErrors = {};
       state.selectedSlot = pickFirstAvailableSlot();
       render();
     });
@@ -1189,24 +1412,63 @@ function bindEvents(root: HTMLElement): void {
       const deptId = btn.dataset.pickDept;
       if (!deptId) return;
       state.selectedDepartmentId = deptId;
+      const dept = getDepartment(deptId);
+      state.bookingDraft.durationMins = dept.defaultDurationMins;
       const matchedSpec = SPECIALISTS.find((s) => s.departmentId === deptId);
       if (matchedSpec) {
         state.selectedSpecialistId = matchedSpec.id;
       }
       state.confirmedBooking = null;
-      state.formError = null;
+      state.fieldErrors = {};
       state.selectedSlot = pickFirstAvailableSlot();
       render();
     });
   });
 
+  // Sync controlled booking draft live so switching specialists, dates, or slots NEVER wipes user input
+  root
+    .querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[data-draft-field]')
+    .forEach((el) => {
+      const key = el.dataset.draftField as keyof BookingDraft | undefined;
+      if (!key) return;
+      const syncValue = (): void => {
+        if (key === 'durationMins') {
+          state.bookingDraft.durationMins = Number(el.value) || 30;
+        } else if (key === 'priority') {
+          state.bookingDraft.priority = (el.value as Priority) || 'routine';
+        } else {
+          state.bookingDraft[key] = el.value;
+        }
+
+        // Clear inline field error cleanly as the user fixes that input (without full re-render)
+        if (key === 'visitorName' && state.fieldErrors.visitorName) {
+          delete state.fieldErrors.visitorName;
+          el.classList.remove('input--invalid');
+          el.setAttribute('aria-invalid', 'false');
+          root.querySelector('#visitor-name-error')?.remove();
+        }
+        if (key === 'visitorEmail' && state.fieldErrors.visitorEmail) {
+          delete state.fieldErrors.visitorEmail;
+          el.classList.remove('input--invalid');
+          el.setAttribute('aria-invalid', 'false');
+          root.querySelector('#visitor-email-error')?.remove();
+        }
+      };
+      el.addEventListener('input', syncValue);
+      el.addEventListener('change', syncValue);
+    });
+
   root.querySelector<HTMLSelectElement>('[data-change-specialist]')?.addEventListener('change', (e) => {
     const specId = (e.currentTarget as HTMLSelectElement).value;
     state.selectedSpecialistId = specId;
     const spec = SPECIALISTS.find((s) => s.id === specId);
-    if (spec) state.selectedDepartmentId = spec.departmentId;
+    if (spec) {
+      state.selectedDepartmentId = spec.departmentId;
+    }
     state.selectedSlot = pickFirstAvailableSlot();
     render();
+    // Restore focus cleanly to the specialist dropdown after re-render
+    document.querySelector<HTMLSelectElement>('#booking-specialist')?.focus();
   });
 
   root.querySelectorAll<HTMLElement>('[data-pick-slot]').forEach((btn) => {
@@ -1215,7 +1477,7 @@ function bindEvents(root: HTMLElement): void {
       if (!slot) return;
       state.selectedSlot = slot;
       state.confirmedBooking = null;
-      state.formError = null;
+      delete state.fieldErrors.general;
       render();
     });
   });
@@ -1224,48 +1486,79 @@ function bindEvents(root: HTMLElement): void {
     e.preventDefault();
     const form = e.currentTarget as HTMLFormElement;
     const fd = new FormData(form);
-    const visitorName = String(fd.get('visitorName') ?? '').trim();
-    const visitorEmail = String(fd.get('visitorEmail') ?? '').trim();
-    const visitorPhone = String(fd.get('visitorPhone') ?? '').trim();
-    const durationMins = Number(fd.get('durationMins') ?? 30);
-    const priority = (String(fd.get('priority') ?? 'routine') as Priority) || 'routine';
-    const specialistId = String(fd.get('specialistId') ?? state.selectedSpecialistId);
-    const protocolNotes = String(fd.get('protocolNotes') ?? '').trim();
 
+    // Always snapshot into controlled bookingDraft so invalid submission NEVER clears user text
+    state.bookingDraft = {
+      visitorName: String(fd.get('visitorName') ?? ''),
+      visitorEmail: String(fd.get('visitorEmail') ?? ''),
+      visitorPhone: String(fd.get('visitorPhone') ?? ''),
+      durationMins: Number(fd.get('durationMins') ?? 30) || 30,
+      priority: (String(fd.get('priority') ?? 'routine') as Priority) || 'routine',
+      protocolNotes: String(fd.get('protocolNotes') ?? ''),
+    };
+    const specialistId = String(fd.get('specialistId') ?? state.selectedSpecialistId);
+
+    // Non-destructive inline per-field validation
+    const nextErrors: FieldErrors = {};
+    if (state.bookingDraft.visitorName.trim().length < 2) {
+      nextErrors.visitorName = 'Enter at least 2 characters for the visitor name.';
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(state.bookingDraft.visitorEmail.trim())) {
+      nextErrors.visitorEmail = 'Enter a valid email address (for example, name@example.org).';
+    }
     if (!state.selectedSlot) {
-      state.formError = 'Select an open time slot above before confirming.';
+      nextErrors.general = 'Select an open time slot above before confirming.';
+    }
+
+    if (nextErrors.visitorName || nextErrors.visitorEmail || nextErrors.general) {
+      state.fieldErrors = nextErrors;
       render();
+      const firstInvalidId = nextErrors.visitorName
+        ? '#visitor-name'
+        : nextErrors.visitorEmail
+        ? '#visitor-email'
+        : null;
+      if (firstInvalidId) {
+        const target = document.querySelector<HTMLInputElement>(firstInvalidId);
+        target?.focus();
+        if (target && target.type === 'text') {
+          target.setSelectionRange(target.value.length, target.value.length);
+        }
+      }
       return;
     }
 
     try {
       const created = await PulseBayBackend.createBooking({
-        visitorName,
-        visitorEmail,
-        visitorPhone,
+        visitorName: state.bookingDraft.visitorName.trim(),
+        visitorEmail: state.bookingDraft.visitorEmail.trim(),
+        visitorPhone: state.bookingDraft.visitorPhone.trim(),
         departmentId: state.selectedDepartmentId,
         specialistId,
         date: state.selectedDate,
         startTime: state.selectedSlot,
-        durationMins,
-        priority,
-        protocolNotes,
+        durationMins: state.bookingDraft.durationMins,
+        priority: state.bookingDraft.priority,
+        protocolNotes: state.bookingDraft.protocolNotes.trim(),
       });
       state.bookings = await PulseBayBackend.listBookings();
       state.confirmedBooking = created;
-      state.formError = null;
+      state.fieldErrors = {};
+      state.bookingDraft = defaultDraft(getDepartment(state.selectedDepartmentId).defaultDurationMins);
       state.selectedSlot = pickFirstAvailableSlot();
       render();
       showToast(`Confirmed ${created.referenceCode} for ${created.visitorName}.`);
     } catch (err) {
-      state.formError = err instanceof Error ? err.message : String(err);
+      state.fieldErrors = {
+        general: err instanceof Error ? err.message : String(err),
+      };
       render();
     }
   });
 
   root.querySelector<HTMLElement>('[data-book-another]')?.addEventListener('click', () => {
     state.confirmedBooking = null;
-    state.formError = null;
+    state.fieldErrors = {};
     state.selectedSlot = pickFirstAvailableSlot();
     render();
   });
@@ -1364,6 +1657,42 @@ function bindEvents(root: HTMLElement): void {
     });
   });
 
+  // View / Edit Notes modal
+  root.querySelectorAll<HTMLElement>('[data-open-notes]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.notesTargetId = btn.dataset.openNotes ?? null;
+      render();
+    });
+  });
+
+  root.querySelectorAll<HTMLElement>('[data-close-notes]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.notesTargetId = null;
+      render();
+    });
+  });
+
+  root.querySelector<HTMLFormElement>('[data-notes-form]')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!state.notesTargetId) return;
+    const form = e.currentTarget as HTMLFormElement;
+    const fd = new FormData(form);
+    const checked = fd.getAll('checklistItem').map((v) => String(v));
+    const freeNotes = String(fd.get('freeNotes') ?? '');
+    const combined = formatProtocolNotes(checked, freeNotes);
+
+    try {
+      await PulseBayBackend.updateBookingNotes(state.notesTargetId, combined);
+      state.bookings = await PulseBayBackend.listBookings();
+      state.notesTargetId = null;
+      render();
+      showToast('Protocol checklist & visit notes saved.');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), true);
+    }
+  });
+
+  // Reschedule modal
   root.querySelectorAll<HTMLElement>('[data-open-reschedule]').forEach((btn) => {
     btn.addEventListener('click', () => {
       state.rescheduleTargetId = btn.dataset.openReschedule ?? null;
@@ -1413,7 +1742,7 @@ function bindEvents(root: HTMLElement): void {
       const scoped = getExportScopedBookings();
       try {
         const res = await PulseBayBackend.exportSchedule(fmt, scoped.bookings, scoped.label, scoped.filter);
-        if (!res) return; // User cancelled native Save-As dialog
+        if (!res) return;
         showToast(
           res.savedPath
             ? `Exported ${res.recordCount} records to ${res.savedPath}`
@@ -1431,7 +1760,8 @@ function bindEvents(root: HTMLElement): void {
       try {
         state.bookings = await PulseBayBackend.resetSampleData();
         state.confirmedBooking = null;
-        state.formError = null;
+        state.fieldErrors = {};
+        state.bookingDraft = defaultDraft(getDepartment(state.selectedDepartmentId).defaultDurationMins);
         state.rosterFilter = {};
         state.selectedSlot = pickFirstAvailableSlot();
         render();
@@ -1453,42 +1783,40 @@ function bindEvents(root: HTMLElement): void {
   });
 
   // Mount native Top-Layer modal dialogs so Escape, backdrop click, and z-index work flawlessly
-  const aboutDlg = root.querySelector<HTMLDialogElement>('[data-about-dialog]');
-  if (aboutDlg && !aboutDlg.open) {
-    aboutDlg.showModal();
-    aboutDlg.addEventListener('cancel', (ev) => {
+  const mountDialog = (selector: string, onClose: () => void): void => {
+    const dlg = root.querySelector<HTMLDialogElement>(selector);
+    if (!dlg || dlg.open) return;
+    dlg.showModal();
+    dlg.addEventListener('cancel', (ev) => {
       ev.preventDefault();
-      state.aboutOpen = false;
+      onClose();
       render();
     });
-    aboutDlg.addEventListener('click', (ev) => {
-      if (ev.target === aboutDlg) {
-        state.aboutOpen = false;
+    dlg.addEventListener('click', (ev) => {
+      if (ev.target === dlg) {
+        onClose();
         render();
       }
     });
-  }
+  };
 
-  const reschedDlg = root.querySelector<HTMLDialogElement>('[data-reschedule-dialog]');
-  if (reschedDlg && !reschedDlg.open) {
-    reschedDlg.showModal();
-    reschedDlg.addEventListener('cancel', (ev) => {
-      ev.preventDefault();
-      state.rescheduleTargetId = null;
-      render();
-    });
-    reschedDlg.addEventListener('click', (ev) => {
-      if (ev.target === reschedDlg) {
-        state.rescheduleTargetId = null;
-        render();
-      }
-    });
-  }
+  mountDialog('[data-about-dialog]', () => {
+    state.aboutOpen = false;
+  });
+  mountDialog('[data-reschedule-dialog]', () => {
+    state.rescheduleTargetId = null;
+  });
+  mountDialog('[data-notes-dialog]', () => {
+    state.notesTargetId = null;
+  });
 }
 
 async function bootstrap(): Promise<void> {
   try {
     state.runtime = await PulseBayBackend.getRuntimeInfo();
+    const previewMode = new URLSearchParams(window.location.search).get('preview');
+    document.documentElement.dataset.runtime =
+      previewMode === 'desktop' ? 'desktop' : state.runtime.mode;
     state.bookings = await PulseBayBackend.listBookings();
   } catch (err) {
     showToast(err instanceof Error ? err.message : 'Failed to load bookings.', true);

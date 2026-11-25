@@ -180,6 +180,21 @@ export const PulseBayBackend = {
     return target;
   },
 
+  async updateBookingNotes(id: string, protocolNotes: string): Promise<Booking> {
+    if (isDesktopRuntime()) {
+      return tauriInvoke<Booking>('update_booking_notes', {
+        id,
+        protocolNotes,
+      });
+    }
+    const list = readBrowserBookings();
+    const target = list.find((b) => b.id === id);
+    if (!target) throw new Error('Booking not found.');
+    target.protocolNotes = protocolNotes.trim();
+    writeBrowserBookings(list);
+    return target;
+  },
+
   async rescheduleBooking(id: string, newDate: string, newStartTime: string): Promise<Booking> {
     if (isDesktopRuntime()) {
       return tauriInvoke<Booking>('reschedule_booking', {

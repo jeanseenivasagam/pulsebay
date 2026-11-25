@@ -40,7 +40,7 @@ This warning means the binary is new and unsigned — not that it contains malwa
 2. Verify the file name is `PulseBay_0.1.0_x64-setup.exe`.
 3. Click **Run anyway** to start the guided user-level installer.
 
-Prefer zero installer steps? You can also run the portable `pulsebay-desktop.exe` directly or compile it from source yourself with `cargo`.
+Prefer zero installer steps? Download `PulseBay_0.1.0_x64-portable.zip`, extract both `pulsebay-desktop.exe` and `WebView2Loader.dll` into the same folder, and double-click `pulsebay-desktop.exe` (keeping `WebView2Loader.dll` beside the executable is required by Windows WebView2 on the GNU toolchain). You can also compile from source directly with `cargo`.
 
 ---
 

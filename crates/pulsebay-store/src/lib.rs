@@ -52,6 +52,17 @@ mod tests {
         assert_eq!(moved.date, "2027-01-16");
         assert_eq!(moved.start_time, "14:30");
 
+        let noted = store
+            .update_notes(
+                &created.id,
+                "[x] Vitals checked | [x] ID verified\nPatient requested follow-up summary.",
+            )
+            .unwrap_or_else(|e| panic!("update_notes failed: {e}"));
+        assert!(noted.protocol_notes.contains("[x] Vitals checked"));
+        assert!(noted
+            .protocol_notes
+            .contains("Patient requested follow-up summary."));
+
         let filtered = store
             .list_filtered(&BookingFilter {
                 search_query: Some("Riley".into()),

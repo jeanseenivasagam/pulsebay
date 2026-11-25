@@ -76,6 +76,18 @@ fn update_booking_status(
 }
 
 #[tauri::command]
+fn update_booking_notes(
+    state: State<'_, AppState>,
+    id: String,
+    protocol_notes: String,
+) -> Result<Booking, String> {
+    let store = lock_store(&state)?;
+    store
+        .update_notes(&id, &protocol_notes)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn reschedule_booking(
     state: State<'_, AppState>,
     id: String,
@@ -195,6 +207,7 @@ pub fn run() {
             list_bookings,
             create_booking,
             update_booking_status,
+            update_booking_notes,
             reschedule_booking,
             delete_booking,
             reset_sample_data,

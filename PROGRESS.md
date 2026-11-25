@@ -18,4 +18,9 @@
   - Generated verified `SHA256SUMS.txt` checksums and transparent SmartScreen/uninstaller guide (`docs/INSTALL_WINDOWS.md`)
   - Captured and embedded 4 crisp desktop screenshots in `README.md` (`docs/screenshots/`)
   - Verified `.gitignore` hygiene (zero `.env`, tokens, `target/`, `node_modules/`, `dist/`, or `release-artifacts/` tracked)
+- [x] **Desktop Bug-Fix & UX Polish Pass (`pulsebay-desktop.exe`):**
+  - Fixed `WebView2Loader.dll` startup error for standalone portable launches by bundling `WebView2Loader.dll` alongside `pulsebay-desktop.exe` in `release-artifacts/` and generating `PulseBay_0.1.0_x64-portable.zip` (all 4 release files checksummed in `SHA256SUMS.txt`)
+  - Locked native desktop layout (`data-runtime="desktop"`) to `100vh` with zero outer window scrollbar (`1360×880` default, enforced `minWidth: 1120`, `minHeight: 740` in `tauri.conf.json`; inner scroll on data tables only)
+  - Fixed Booking Intake Console to use controlled `bookingDraft` state (changing **Assigned Specialist**, wing, date, or time slot never resets entered fields) and non-destructive red-border inline validation (preserving malformed inputs and fixing the `<input type="email">` `setSelectionRange` error)
+  - Added **Shift Roster → Notes** (`View / Edit Notes`) Top-Layer modal with department-specific **Protocol Checklist** toggles + editable **Visit Notes** persisted via SQLite (`update_notes`) and Tauri IPC (`update_booking_notes`), and included checklist/notes rows across **Excel `.xlsx`**, **CSV `.csv`**, and **PDF `.pdf`** exports (both Rust and browser)
 - [ ] **Pre-Publish Gate:** Awaiting user review and explicit sign-off before any GitHub push or Netlify deployment

@@ -66,9 +66,11 @@ const pdfBytes = buildPdfBytes(many, 'Multi-Page QA Scope');
 const pdfText = new TextDecoder('latin1').decode(pdfBytes);
 assert.ok(pdfText.startsWith('%PDF-1.4\n'));
 assert.ok(pdfText.trimEnd().endsWith('%%EOF'));
-assert.ok(pdfText.includes('/Count 2'));
-assert.ok(pdfText.includes('Page 2 of 2'));
+assert.ok(pdfText.includes('/Count 3'));
+assert.ok(pdfText.includes('Page 3 of 3'));
 assert.ok(pdfText.includes('\\(Jr.\\)'));
+assert.ok(pdfText.includes('Checklist / Notes:'));
+assert.ok(pdfText.includes('Check-in, "fast lane" - Bay A'));
 
 const emptyPdfText = new TextDecoder('latin1').decode(buildPdfBytes([], 'Empty Scope'));
 assert.ok(emptyPdfText.includes('No scheduled bookings matched'));

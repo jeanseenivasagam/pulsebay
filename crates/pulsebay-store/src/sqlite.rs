@@ -222,6 +222,19 @@ impl BookingStore {
         self.get_by_id(id)
     }
 
+    /// Updates a booking's protocol checklist and visit notes.
+    pub fn update_notes(&self, id: &str, protocol_notes: &str) -> Result<Booking, StoreError> {
+        let trimmed = protocol_notes.trim();
+        let updated = self.conn.execute(
+            "UPDATE bookings SET protocol_notes = ?1 WHERE id = ?2",
+            params![trimmed, id],
+        )?;
+        if updated == 0 {
+            return Err(StoreError::Core(CoreError::BookingNotFound(id.to_owned())));
+        }
+        self.get_by_id(id)
+    }
+
     /// Reschedules an existing booking to a new date/time after verifying no conflict exists.
     pub fn reschedule_booking(
         &self,

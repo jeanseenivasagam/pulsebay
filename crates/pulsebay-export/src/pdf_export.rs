@@ -11,6 +11,9 @@ use crate::error::ExportError;
 const PAGE_W: f32 = 792.0;
 const PAGE_H: f32 = 612.0;
 const MARGIN: f32 = 36.0;
+const FOOTER_LIMIT_Y: f32 = 46.0;
+const BASE_ROW_H: f32 = 22.0;
+const NOTE_ROW_EXTRA_H: f32 = 13.0;
 
 #[derive(Clone, Copy)]
 struct Rgb(f32, f32, f32);
@@ -38,6 +41,7 @@ fn pdf_escape(input: &str) -> String {
             '—' | '–' | '·' | '•' => '-',
             '’' | '‘' => '\'',
             '“' | '”' => '"',
+            '\n' | '\r' | '\t' => ' ',
             c if c.is_ascii() && !c.is_ascii_control() => c,
             _ => ' ',
         };
@@ -51,6 +55,15 @@ fn pdf_escape(input: &str) -> String {
     out
 }
 
+fn compact_notes(notes: &str) -> String {
+    notes
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
 fn truncate_str(input: &str, max_chars: usize) -> String {
     let chars: Vec<char> = input.chars().collect();
     if chars.len() <= max_chars {
@@ -61,6 +74,45 @@ fn truncate_str(input: &str, max_chars: usize) -> String {
     } else {
         chars[..max_chars].iter().collect()
     }
+}
+
+fn row_height_for(booking: &Booking) -> f32 {
+    if compact_notes(&booking.protocol_notes).is_empty() {
+        BASE_ROW_H
+    } else {
+        BASE_ROW_H + NOTE_ROW_EXTRA_H
+    }
+}
+
+fn paginate_bookings<'a>(bookings: &'a [Booking]) -> Vec<Vec<&'a Booking>> {
+    if bookings.is_empty() {
+        return vec![Vec::new()];
+    }
+
+    let mut pages: Vec<Vec<&'a Booking>> = Vec::new();
+    let mut current: Vec<&'a Booking> = Vec::new();
+
+    // Available vertical height for rows below table header
+    let page1_capacity = (PAGE_H - MARGIN - 54.0 - 14.0 - 44.0 - 16.0 - 24.0) - FOOTER_LIMIT_Y;
+    let next_capacity = (PAGE_H - MARGIN - 54.0 - 18.0 - 24.0) - FOOTER_LIMIT_Y;
+    let mut remaining = page1_capacity;
+
+    for b in bookings {
+        let h = row_height_for(b);
+        if !current.is_empty() && h > remaining {
+            pages.push(current);
+            current = Vec::new();
+            remaining = next_capacity;
+        }
+        current.push(b);
+        remaining -= h;
+    }
+
+    if !current.is_empty() {
+        pages.push(current);
+    }
+
+    pages
 }
 
 fn draw_rect(buf: &mut String, rect: Rect, color: Rgb) {
@@ -249,8 +301,7 @@ fn render_page_stream(
         );
     }
 
-    // Rows
-    let row_h = 23.0;
+    // Dynamic-height rows with protocol checklist & visit notes sub-line
     if rows.is_empty() {
         draw_text(
             &mut s,
@@ -264,8 +315,17 @@ fn render_page_stream(
             "No scheduled bookings matched the selected export filter.",
         );
     } else {
+        let mut cursor_y = header_y;
         for (idx, b) in rows.iter().enumerate() {
-            let ry = header_y - row_h * (idx as f32 + 1.0);
+            let notes_clean = compact_notes(&b.protocol_notes);
+            let has_notes = !notes_clean.is_empty();
+            let row_h = if has_notes {
+                BASE_ROW_H + NOTE_ROW_EXTRA_H
+            } else {
+                BASE_ROW_H
+            };
+            let ry = cursor_y - row_h;
+
             if idx % 2 == 1 {
                 draw_rect(
                     &mut s,
@@ -292,7 +352,7 @@ fn render_page_stream(
             let (dept_name, dept_code, _room) = resolve_department(departments, &b.department_id);
             let spec_name = resolve_specialist(specialists, &b.specialist_id);
             let date_time = format!("{} {}", b.date, format_slot_label(&b.start_time));
-            let text_y = ry + 7.5;
+            let primary_y = if has_notes { ry + 19.5 } else { ry + 7.5 };
 
             draw_text(
                 &mut s,
@@ -302,7 +362,7 @@ fn render_page_stream(
                     color: navy,
                 },
                 cols[0].1,
-                text_y,
+                primary_y,
                 &truncate_str(&b.reference_code, 14),
             );
             draw_text(
@@ -313,7 +373,7 @@ fn render_page_stream(
                     color: Rgb(0.12, 0.20, 0.30),
                 },
                 cols[1].1,
-                text_y,
+                primary_y,
                 &truncate_str(&date_time, 20),
             );
             draw_text(
@@ -324,7 +384,7 @@ fn render_page_stream(
                     color: navy,
                 },
                 cols[2].1,
-                text_y,
+                primary_y,
                 &truncate_str(&b.visitor_name, 22),
             );
             draw_text(
@@ -335,7 +395,7 @@ fn render_page_stream(
                     color: Rgb(0.18, 0.28, 0.39),
                 },
                 cols[3].1,
-                text_y,
+                primary_y,
                 &truncate_str(&format!("[{dept_code}] {dept_name}"), 21),
             );
             draw_text(
@@ -346,7 +406,7 @@ fn render_page_stream(
                     color: Rgb(0.18, 0.28, 0.39),
                 },
                 cols[4].1,
-                text_y,
+                primary_y,
                 &truncate_str(spec_name, 20),
             );
             draw_text(
@@ -357,7 +417,7 @@ fn render_page_stream(
                     color: Rgb(0.55, 0.32, 0.05),
                 },
                 cols[5].1,
-                text_y,
+                primary_y,
                 b.priority.label(),
             );
             draw_text(
@@ -368,9 +428,36 @@ fn render_page_stream(
                     color: Rgb(0.059, 0.48, 0.42),
                 },
                 cols[6].1,
-                text_y,
+                primary_y,
                 b.status.label(),
             );
+
+            if has_notes {
+                draw_text(
+                    &mut s,
+                    TextStyle {
+                        font: "F2",
+                        size: 7.5,
+                        color: Rgb(0.24, 0.36, 0.48),
+                    },
+                    cols[0].1,
+                    ry + 6.0,
+                    "Checklist / Notes:",
+                );
+                draw_text(
+                    &mut s,
+                    TextStyle {
+                        font: "F1",
+                        size: 7.6,
+                        color: Rgb(0.28, 0.38, 0.48),
+                    },
+                    cols[1].1,
+                    ry + 6.0,
+                    &truncate_str(&notes_clean, 118),
+                );
+            }
+
+            cursor_y = ry;
         }
     }
 
@@ -418,20 +505,7 @@ pub fn export_pdf_bytes(
     specialists: &[Specialist],
     meta: &ExportMeta,
 ) -> Result<Vec<u8>, ExportError> {
-    let mut pages_rows: Vec<Vec<&Booking>> = Vec::new();
-    if bookings.is_empty() {
-        pages_rows.push(Vec::new());
-    } else {
-        let first_chunk = bookings.len().min(16);
-        pages_rows.push(bookings[..first_chunk].iter().collect());
-        let mut idx = first_chunk;
-        while idx < bookings.len() {
-            let end = (idx + 19).min(bookings.len());
-            pages_rows.push(bookings[idx..end].iter().collect());
-            idx = end;
-        }
-    }
-
+    let pages_rows = paginate_bookings(bookings);
     let total_pages = pages_rows.len();
 
     let mut objects: Vec<(usize, Vec<u8>)> = Vec::new();

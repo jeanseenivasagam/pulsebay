@@ -87,9 +87,11 @@ mod tests {
 
         assert!(text.starts_with("%PDF-1.4\n"));
         assert!(text.trim_end().ends_with("%%EOF"));
-        assert!(text.contains("/Count 2"));
+        assert!(text.contains("/Count 3"));
         assert!(text.contains("Hannah Okafor"));
-        assert!(text.contains("Page 2 of 2"));
+        assert!(text.contains("Checklist / Notes:"));
+        assert!(text.contains("Annual baseline vitals"));
+        assert!(text.contains("Page 3 of 3"));
     }
 
     #[test]
@@ -134,6 +136,7 @@ mod tests {
         let pdf_str = String::from_utf8_lossy(&pdf_bytes);
         assert!(pdf_str.contains("\\(Jr.\\)"));
         assert!(pdf_str.contains("\\\\"));
+        assert!(pdf_str.contains("Notes with, commas"));
         assert!(pdf_str.trim_end().ends_with("%%EOF"));
 
         let xlsx_bytes = export_xlsx_bytes(&bookings[..1], &depts, &specs, &meta)
