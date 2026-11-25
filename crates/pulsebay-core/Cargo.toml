@@ -1,0 +1,16 @@
+[package]
+name = "pulsebay-core"
+description = "Core domain models, scheduling rules, conflict detection, and validation for PulseBay"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

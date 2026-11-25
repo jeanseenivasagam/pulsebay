@@ -1,0 +1,20 @@
+[package]
+name = "pulsebay-store"
+description = "Embedded SQLite persistence layer for PulseBay schedules and bookings"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+directories.workspace = true
+pulsebay-core = { path = "../pulsebay-core" }
+rusqlite.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

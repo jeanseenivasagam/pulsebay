@@ -1,0 +1,12 @@
+{
+  "name": "pulsebay-desktop-packager",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build --bundles nsis"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0"
+  }
+}
