@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "pulsebay-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "serde",
@@ -442,7 +442,7 @@ dependencies = [
 
 [[package]]
 name = "pulsebay-export"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "csv",
@@ -454,7 +454,7 @@ dependencies = [
 
 [[package]]
 name = "pulsebay-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "directories",

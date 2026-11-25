@@ -156,7 +156,7 @@ const nowDate = new Date();
 const state: AppState = {
   runtime: {
     mode: 'web-demo',
-    version: '0.1.0',
+    version: '0.1.1',
     storageLabel: 'Browser Local Sandbox',
   },
   activeTab: 'calendar',
@@ -1258,11 +1258,11 @@ function renderAboutModal(): string {
         </p>
 
         <div class="console-card" style="box-shadow: none; background: var(--surface-well); padding: 0.85rem;">
-          <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">Safe Windows Installation</h4>
+          <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">Safe Windows Installation &amp; Upgrades</h4>
           <p style="font-size: 0.84rem; color: var(--ink-secondary);">
-            The Windows installer installs cleanly per-user into <code>%LOCALAPPDATA%\\Programs\\PulseBay</code>
-            with no admin elevation required, zero background services, a standard Settings → Apps uninstaller,
-            and published SHA-256 checksums.
+            Installs cleanly per-user into <code>%LOCALAPPDATA%\\PulseBay</code> with no admin elevation required,
+            zero background services, in-place upgrades that preserve your SQLite data in
+            <code>%APPDATA%\\io.jeanseenivasagam.pulsebay</code>, and published SHA-256 checksums.
           </p>
           ${
             state.runtime.dbPath

@@ -134,4 +134,25 @@ mod tests {
             .unwrap_or_else(|e| panic!("third open failed: {e}"));
         assert!(third_open.list_all().unwrap_or_default().is_empty());
     }
+
+    #[test]
+    fn migrates_legacy_database_without_losing_user_records() {
+        let dir = tempdir().unwrap_or_else(|e| panic!("tempdir failed: {e}"));
+        let legacy_db = dir.path().join("legacy/pulsebay.db");
+        let new_db = dir.path().join("io.jeanseenivasagam.pulsebay/pulsebay.db");
+
+        {
+            let legacy = BookingStore::open_path(&legacy_db)
+                .unwrap_or_else(|e| panic!("legacy open failed: {e}"));
+            let _ = legacy
+                .create_booking(new_booking("Elena Upgrade", "2027-04-20", "10:30"))
+                .unwrap_or_else(|e| panic!("legacy create failed: {e}"));
+        }
+
+        let migrated = BookingStore::open_with_migration(&new_db, Some(&legacy_db))
+            .unwrap_or_else(|e| panic!("migration open failed: {e}"));
+        assert!(new_db.exists());
+        let rows = migrated.list_all().unwrap_or_default();
+        assert!(rows.iter().any(|b| b.visitor_name == "Elena Upgrade"));
+    }
 }

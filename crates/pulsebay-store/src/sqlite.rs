@@ -18,8 +18,13 @@ pub struct BookingStore {
 }
 
 impl BookingStore {
-    /// Opens (or initializes) the standard user-level database at `%APPDATA%\PulseBay\pulsebay.db`
-    /// (or OS equivalent) with zero administrator privileges required.
+    /// Returns the legacy `ProjectDirs` SQLite path used by early `0.1.0` local builds, if resolvable.
+    pub fn legacy_default_path() -> Option<PathBuf> {
+        ProjectDirs::from("io", "jeanseenivasagam", "PulseBay")
+            .map(|dirs| dirs.data_dir().join("pulsebay.db"))
+    }
+
+    /// Opens (or initializes) the standard user-level database with zero administrator privileges.
     pub fn open_default() -> Result<Self, StoreError> {
         let proj_dirs = ProjectDirs::from("io", "jeanseenivasagam", "PulseBay")
             .ok_or(StoreError::DataDirUnavailable)?;
@@ -27,6 +32,36 @@ impl BookingStore {
         fs::create_dir_all(data_dir)?;
         let db_path = data_dir.join("pulsebay.db");
         Self::open_path(db_path)
+    }
+
+    /// Opens the database at `target_path`, automatically migrating an existing database from
+    /// `legacy_path` if `target_path` does not exist yet so user data survives upgrades seamlessly.
+    pub fn open_with_migration(
+        target_path: impl AsRef<Path>,
+        legacy_path: Option<&Path>,
+    ) -> Result<Self, StoreError> {
+        let target = target_path.as_ref();
+        if !target.exists() {
+            if let Some(legacy) = legacy_path {
+                if legacy != target && legacy.exists() {
+                    if let Some(parent) = target.parent() {
+                        if !parent.as_os_str().is_empty() {
+                            fs::create_dir_all(parent)?;
+                        }
+                    }
+                    fs::copy(legacy, target)?;
+                    for suffix in ["-wal", "-shm"] {
+                        let legacy_sidecar = PathBuf::from(format!("{}{suffix}", legacy.display()));
+                        if legacy_sidecar.exists() {
+                            let target_sidecar =
+                                PathBuf::from(format!("{}{suffix}", target.display()));
+                            let _ = fs::copy(legacy_sidecar, target_sidecar);
+                        }
+                    }
+                }
+            }
+        }
+        Self::open_path(target)
     }
 
     /// Opens (or creates) a SQLite database at a specific file path.

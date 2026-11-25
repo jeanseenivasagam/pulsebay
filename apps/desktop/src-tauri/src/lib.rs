@@ -8,7 +8,7 @@ use pulsebay_core::{
 use pulsebay_export::{export_csv_file, export_pdf_file, export_xlsx_file, ExportMeta};
 use pulsebay_store::BookingStore;
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 struct AppState {
@@ -42,11 +42,11 @@ fn lock_store<'a>(state: &'a State<'a, AppState>) -> Result<std::sync::MutexGuar
 }
 
 #[tauri::command]
-fn get_runtime_info(state: State<'_, AppState>) -> Result<RuntimeInfo, String> {
+fn get_runtime_info(app: AppHandle, state: State<'_, AppState>) -> Result<RuntimeInfo, String> {
     let store = lock_store(&state)?;
     Ok(RuntimeInfo {
         mode: "desktop".into(),
-        version: env!("CARGO_PKG_VERSION").into(),
+        version: app.package_info().version.to_string(),
         storage_label: "Local SQLite Database".into(),
         db_path: store.db_path().map(|p| p.display().to_string()),
     })
@@ -194,13 +194,27 @@ fn export_schedule(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let store = BookingStore::open_default()
-        .unwrap_or_else(|_| BookingStore::open_in_memory().expect("in-memory sqlite fallback"));
-
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState {
-            store: Mutex::new(store),
+        .setup(|app| {
+            let legacy = BookingStore::legacy_default_path();
+            let store = app
+                .path()
+                .app_data_dir()
+                .ok()
+                .and_then(|dir| {
+                    BookingStore::open_with_migration(dir.join("pulsebay.db"), legacy.as_deref())
+                        .ok()
+                })
+                .or_else(|| BookingStore::open_default().ok())
+                .unwrap_or_else(|| {
+                    BookingStore::open_in_memory().expect("in-memory sqlite fallback")
+                });
+
+            app.manage(AppState {
+                store: Mutex::new(store),
+            });
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_runtime_info,

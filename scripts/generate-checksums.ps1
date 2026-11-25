@@ -1,16 +1,25 @@
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$tauriConf = Get-Content (Join-Path $repoRoot "apps\desktop\src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json
+$appVersion = $tauriConf.version
 $releaseDir = Join-Path $repoRoot "apps\desktop\src-tauri\target\release"
 $nsisDir = Join-Path $releaseDir "bundle\nsis"
 $outDir = Join-Path $repoRoot "release-artifacts"
 
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+# Clear stale artifacts from earlier versions so release-artifacts/ stays clean
+Get-ChildItem -Path $outDir -File -ErrorAction SilentlyContinue | Remove-Item -Force
 
 $filesToHash = @()
 
-if (Test-Path $nsisDir) {
-    foreach ($installer in (Get-ChildItem -Path $nsisDir -Filter "*.exe" -File)) {
+$expectedSetup = Join-Path $nsisDir "PulseBay_${appVersion}_x64-setup.exe"
+if (Test-Path $expectedSetup) {
+    $dest = Join-Path $outDir (Split-Path -Leaf $expectedSetup)
+    Copy-Item -Path $expectedSetup -Destination $dest -Force
+    $filesToHash += Get-Item $dest
+} elseif (Test-Path $nsisDir) {
+    foreach ($installer in (Get-ChildItem -Path $nsisDir -Filter "*${appVersion}*.exe" -File)) {
         $dest = Join-Path $outDir $installer.Name
         Copy-Item -Path $installer.FullName -Destination $dest -Force
         $filesToHash += Get-Item $dest
@@ -30,18 +39,14 @@ if (Test-Path $portableExe) {
         Copy-Item -Path $webviewDll -Destination $destDll -Force
         $filesToHash += Get-Item $destDll
 
-        # Package portable ZIP containing both pulsebay-desktop.exe and WebView2Loader.dll
-        $portableZip = Join-Path $outDir "PulseBay_0.1.0_x64-portable.zip"
-        if (Test-Path $portableZip) {
-            Remove-Item -Path $portableZip -Force
-        }
+        $portableZip = Join-Path $outDir "PulseBay_${appVersion}_x64-portable.zip"
         Compress-Archive -Path @($destExe, $destDll) -DestinationPath $portableZip -CompressionLevel Optimal
         $filesToHash += Get-Item $portableZip
     }
 }
 
 if ($filesToHash.Count -eq 0) {
-    Write-Error "No release binaries found. Run 'npm run tauri:build' in apps/desktop first."
+    Write-Error "No release binaries found for version $appVersion. Run 'npm run tauri:build' in apps/desktop first."
     exit 1
 }
 
@@ -53,5 +58,5 @@ foreach ($f in $filesToHash) {
 
 $sumsPath = Join-Path $outDir "SHA256SUMS.txt"
 Set-Content -Path $sumsPath -Value ($lines -join "`n") -Encoding ascii
-Write-Host "Wrote SHA-256 checksums to $sumsPath"
+Write-Host "Wrote SHA-256 checksums for PulseBay v$appVersion to $sumsPath"
 Get-Content $sumsPath

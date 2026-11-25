@@ -34,7 +34,7 @@ Designed with a playful-yet-crisp clinical console visual system (rounded tactil
   - **Excel (`.xlsx`):** Multi-sheet OOXML workbook (`Schedule` + `Summary` sheets with styled cobalt headers, frozen top row, status styling, and KPI/department counts).
   - **CSV (`.csv`):** RFC-4180 CSV with UTF-8 BOM so Microsoft Excel on Windows opens Unicode names cleanly.
   - **PDF (`.pdf`):** Print-ready landscape schedule report with PulseBay banner, 5 KPI status tiles, tabular roster, and automatic multi-page pagination.
-- **Local SQLite Persistence (Desktop) & Browser Sandbox (Web Demo):** Desktop stores records locally in `%APPDATA%\PulseBay\pulsebay.db`; the companion web demo runs in the browser with `localStorage` persistence and instant demo reset.
+- **Local SQLite Persistence (Desktop) & Browser Sandbox (Web Demo):** Desktop stores records locally in `%APPDATA%\io.jeanseenivasagam.pulsebay\pulsebay.db` (separate from the program directory so upgrades preserve all bookings and notes); the companion web demo runs in the browser with `localStorage` persistence and instant demo reset.
 
 ---
 
@@ -91,15 +91,20 @@ powershell -ExecutionPolicy Bypass -File scripts/build-windows-installer.ps1
 ```
 
 Outputs are generated locally under `release-artifacts/` (ignored from Git):
-- `PulseBay_0.1.0_x64-setup.exe` (user-level NSIS Windows installer)
-- `pulsebay-desktop.exe` (standalone portable executable)
+- `PulseBay_<version>_x64-setup.exe` (user-level NSIS Windows installer)
+- `PulseBay_<version>_x64-portable.zip` (portable bundle containing `pulsebay-desktop.exe` + `WebView2Loader.dll`)
 - `SHA256SUMS.txt` (verified SHA-256 checksums)
 
 ---
 
-## Safe Windows Installation
+## Safe Windows Installation & Upgrading Existing Installations
 
-See [docs/INSTALL_WINDOWS.md](./docs/INSTALL_WINDOWS.md) for transparent installation steps, per-user path details (`%LOCALAPPDATA%\Programs\PulseBay`), uninstaller behavior, and SHA-256 checksum verification for Windows SmartScreen.
+- **Clean Per-User Install:** Installs into `%LOCALAPPDATA%\PulseBay` with no Administrator UAC prompt, zero background services, and a standard entry in **Windows Settings → Apps → Installed apps**.
+- **In-Place Upgrades (No Duplicate Entries):** Run a newer `PulseBay_<version>_x64-setup.exe` directly over an existing installation. The installer automatically detects the existing `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\PulseBay` registration, compares semantic versions, blocks accidental silent downgrades (`allowDowngrades: false`), and updates the single existing installation cleanly.
+- **User Data Preserved Across Updates:** Your SQLite bookings, shift roster statuses, protocol checklists, and visit notes live in `%APPDATA%\io.jeanseenivasagam.pulsebay\pulsebay.db`—completely outside the program folder. Upgrading never deletes or resets user data (and `v0.1.1+` automatically migrates databases created by early `0.1.0` builds).
+- **Running-App Detection:** If `pulsebay-desktop.exe` is currently open when you launch an update installer, Windows Restart Manager prompts you to close it cleanly before replacing binaries and offers to relaunch the updated version when finished.
+
+See [docs/INSTALL_WINDOWS.md](./docs/INSTALL_WINDOWS.md) for step-by-step upgrade instructions, uninstaller options, and SHA-256 verification for Windows SmartScreen.
 
 ---
 

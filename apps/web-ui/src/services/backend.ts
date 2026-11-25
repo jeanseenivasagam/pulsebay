@@ -97,7 +97,7 @@ export const PulseBayBackend = {
     }
     return {
       mode: 'web-demo',
-      version: '0.1.0',
+      version: '0.1.1',
       storageLabel: 'Browser Local Sandbox',
     };
   },
