@@ -4,6 +4,8 @@
 
 Designed with a playful-yet-crisp clinical console visual system (rounded tactile bevel cards, high-contrast status pills, clear bay/wing indicators, and tabular time slots), PulseBay helps teams manage daily schedules, prevent double-booking conflicts, and export clean reports without cloud lock-in.
 
+- **Live Web Demo (Netlify):** https://pulsebay-demo.netlify.app
+- **Windows Installer Release (`v1.0.0`):** https://github.com/jeanseenivasagam/pulsebay/releases/tag/v1.0.0
 - **Author:** Jean Seenivasagam
 - **GitHub:** https://github.com/jeanseenivasagam/
 - **LinkedIn:** https://www.linkedin.com/in/jeanseenivasagam/

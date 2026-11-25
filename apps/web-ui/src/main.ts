@@ -156,7 +156,7 @@ const nowDate = new Date();
 const state: AppState = {
   runtime: {
     mode: 'web-demo',
-    version: '0.1.1',
+    version: '1.0.0',
     storageLabel: 'Browser Local Sandbox',
   },
   activeTab: 'calendar',

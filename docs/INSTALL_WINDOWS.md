@@ -8,7 +8,7 @@ PulseBay is packaged as a clean, transparent, **per-user Windows application** w
 
 | Property | Behavior |
 | :--- | :--- |
-| **Installer File** | `PulseBay_<version>_x64-setup.exe` (e.g. `PulseBay_0.1.1_x64-setup.exe`, NSIS user-level installer) |
+| **Installer File** | `PulseBay_<version>_x64-setup.exe` (e.g. `PulseBay_1.0.0_x64-setup.exe`, NSIS user-level installer) |
 | **Install Directory** | `%LOCALAPPDATA%\PulseBay` (no UAC admin prompt required) |
 | **Persistent User Data** | `%APPDATA%\io.jeanseenivasagam.pulsebay\pulsebay.db` (embedded SQLite database — outside the install folder) |
 | **Registry Identity** | `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\PulseBay` (single consistent entry across all versions) |
@@ -38,7 +38,7 @@ You do **not** need to manually uninstall PulseBay before installing a newer ver
 Before running the installer, verify its integrity against the published `SHA256SUMS.txt` file using PowerShell:
 
 ```powershell
-Get-FileHash .\PulseBay_0.1.1_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\PulseBay_1.0.0_x64-setup.exe -Algorithm SHA256
 ```
 
 Compare the printed `Hash` value (case-insensitive) with the matching line in `SHA256SUMS.txt`. They must match character for character.

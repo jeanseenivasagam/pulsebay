@@ -32,4 +32,7 @@
   - Fixed desktop `.search-wrap .input` specificity override (`padding-left: 2.2rem`, 15px icon) so the magnifying-glass icon sits cleanly beside placeholder and typed text with zero overlap
   - Raised minimum desktop window width to `1240×740` (`tauri.conf.json`) and tuned desktop Shift Roster table column padding/action controls—verified **0px horizontal scrollbar** and **0 outer scrollbars** at both `1240×740` and `1360×880` with **0 console errors**
   - Updated `README.md` with 5 verified desktop screenshots (including the new **Protocol Checklist & Visit Notes** modal) and rebuilt `PulseBay_0.1.1_x64-setup.exe`, `pulsebay-desktop.exe`, `PulseBay_0.1.1_x64-portable.zip`, and `SHA256SUMS.txt`
-- [ ] **Pre-Publish Gate:** Awaiting user review and explicit sign-off before creating the clean public GitHub repo, tagged Release, and Netlify web demo deployment
+- [x] **Release `v1.0.0` Build & Publish Prep:**
+  - Bumped all Cargo crates, Tauri bundle config, and Web UI metadata cleanly to `1.0.0` (`13/13` Rust tests, `0` Clippy warnings, browser exporter byte assertions passing)
+  - Built final `PulseBay_1.0.0_x64-setup.exe` (`5.31 MiB`), `PulseBay_1.0.0_x64-portable.zip`, `pulsebay-desktop.exe` + `WebView2Loader.dll`, and `SHA256SUMS.txt`
+  - Added root `netlify.toml` and linked live Netlify Web Demo (`https://pulsebay-demo.netlify.app`) and `v1.0.0` GitHub Release in `README.md`

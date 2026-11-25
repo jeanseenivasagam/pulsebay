@@ -1,6 +1,6 @@
 [package]
 name = "pulsebay-desktop"
-version = "0.1.1"
+version = "1.0.0"
 description = "PulseBay Operations & Booking Console — Native Rust Windows Desktop Application"
 authors = ["Jean Seenivasagam <https://github.com/jeanseenivasagam/>"]
 edition = "2021"
