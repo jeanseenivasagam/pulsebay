@@ -12,13 +12,30 @@ const PAGE_W: f32 = 792.0;
 const PAGE_H: f32 = 612.0;
 const MARGIN: f32 = 36.0;
 
+#[derive(Clone, Copy)]
+struct Rgb(f32, f32, f32);
+
+#[derive(Clone, Copy)]
+struct Rect {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+}
+
+#[derive(Clone, Copy)]
+struct TextStyle<'a> {
+    font: &'a str,
+    size: f32,
+    color: Rgb,
+}
+
 /// Escapes and normalizes text into safe WinAnsi/ASCII bytes for built-in PDF Type1 fonts.
 fn pdf_escape(input: &str) -> String {
     let mut out = String::with_capacity(input.len() + 8);
     for ch in input.chars() {
         let mapped = match ch {
-            '—' | '–' => '-',
-            '·' | '•' => '-',
+            '—' | '–' | '·' | '•' => '-',
             '’' | '‘' => '\'',
             '“' | '”' => '"',
             c if c.is_ascii() && !c.is_ascii_control() => c,
@@ -46,25 +63,20 @@ fn truncate_str(input: &str, max_chars: usize) -> String {
     }
 }
 
-fn draw_rect(buf: &mut String, x: f32, y: f32, w: f32, h: f32, r: f32, g: f32, b: f32) {
-    let _ = writeln!(buf, "{r:.3} {g:.3} {b:.3} rg {x:.1} {y:.1} {w:.1} {h:.1} re f");
+fn draw_rect(buf: &mut String, rect: Rect, color: Rgb) {
+    let _ = writeln!(
+        buf,
+        "{:.3} {:.3} {:.3} rg {:.1} {:.1} {:.1} {:.1} re f",
+        color.0, color.1, color.2, rect.x, rect.y, rect.w, rect.h
+    );
 }
 
-fn draw_text(
-    buf: &mut String,
-    font: &str,
-    size: f32,
-    x: f32,
-    y: f32,
-    r: f32,
-    g: f32,
-    b: f32,
-    text: &str,
-) {
+fn draw_text(buf: &mut String, style: TextStyle<'_>, x: f32, y: f32, text: &str) {
     let escaped = pdf_escape(text);
     let _ = writeln!(
         buf,
-        "BT /{font} {size:.1} Tf {r:.3} {g:.3} {b:.3} rg 1 0 0 1 {x:.1} {y:.1} Tm ({escaped}) Tj ET"
+        "BT /{} {:.1} Tf {:.3} {:.3} {:.3} rg 1 0 0 1 {:.1} {:.1} Tm ({escaped}) Tj ET",
+        style.font, style.size, style.color.0, style.color.1, style.color.2, x, y
     );
 }
 
@@ -80,41 +92,58 @@ fn render_page_stream(
     let mut s = String::with_capacity(8192);
     let content_w = PAGE_W - (MARGIN * 2.0);
 
+    let white = Rgb(1.0, 1.0, 1.0);
+    let cobalt = Rgb(0.106, 0.424, 0.898);
+    let navy = Rgb(0.086, 0.149, 0.231);
+    let soft_ice = Rgb(0.86, 0.92, 1.0);
+
     // Header banner (Console Cobalt #1B6CE5)
     let banner_h = 54.0;
     let banner_y = PAGE_H - MARGIN - banner_h;
-    draw_rect(&mut s, MARGIN, banner_y, content_w, banner_h, 0.106, 0.424, 0.898);
+    draw_rect(
+        &mut s,
+        Rect {
+            x: MARGIN,
+            y: banner_y,
+            w: content_w,
+            h: banner_h,
+        },
+        cobalt,
+    );
     draw_text(
         &mut s,
-        "F2",
-        18.0,
+        TextStyle {
+            font: "F2",
+            size: 18.0,
+            color: white,
+        },
         MARGIN + 16.0,
         banner_y + 30.0,
-        1.0,
-        1.0,
-        1.0,
         &truncate_str(&meta.report_title, 58),
     );
     draw_text(
         &mut s,
-        "F1",
-        9.5,
+        TextStyle {
+            font: "F1",
+            size: 9.5,
+            color: soft_ice,
+        },
         MARGIN + 16.0,
         banner_y + 13.0,
-        0.86,
-        0.92,
-        1.0,
-        &format!("Scope: {}   |   Generated: {}", meta.scope_label, meta.generated_at),
+        &format!(
+            "Scope: {}   |   Generated: {}",
+            meta.scope_label, meta.generated_at
+        ),
     );
     draw_text(
         &mut s,
-        "F2",
-        10.0,
+        TextStyle {
+            font: "F2",
+            size: 10.0,
+            color: white,
+        },
         PAGE_W - MARGIN - 115.0,
         banner_y + 24.0,
-        1.0,
-        1.0,
-        1.0,
         "PULSEBAY DESK",
     );
 
@@ -122,32 +151,60 @@ fn render_page_stream(
     let mut table_top_y = banner_y - 18.0;
     if page_num == 1 {
         let stats = summarize_bookings(all_bookings);
-        let cards: [(&str, usize, (f32, f32, f32)); 5] = [
-            ("TOTAL", stats.total, (0.086, 0.149, 0.231)),
-            ("CONFIRMED", stats.confirmed, (0.059, 0.616, 0.541)),
-            ("CHECKED IN", stats.checked_in, (0.106, 0.424, 0.898)),
-            ("COMPLETED", stats.completed, (0.290, 0.376, 0.478)),
-            ("URGENT", stats.urgent, (0.878, 0.282, 0.353)),
+        let cards: [(&str, usize, Rgb); 5] = [
+            ("TOTAL", stats.total, navy),
+            ("CONFIRMED", stats.confirmed, Rgb(0.059, 0.616, 0.541)),
+            ("CHECKED IN", stats.checked_in, cobalt),
+            ("COMPLETED", stats.completed, Rgb(0.290, 0.376, 0.478)),
+            ("URGENT", stats.urgent, Rgb(0.878, 0.282, 0.353)),
         ];
         let gap = 10.0;
         let card_w = (content_w - gap * 4.0) / 5.0;
         let card_h = 44.0;
         let card_y = banner_y - 14.0 - card_h;
 
-        for (i, (label, val, (ar, ag, ab))) in cards.iter().enumerate() {
+        for (i, (label, val, accent)) in cards.iter().enumerate() {
             let cx = MARGIN + (card_w + gap) * i as f32;
-            draw_rect(&mut s, cx, card_y, card_w, card_h, 0.945, 0.965, 0.973);
-            draw_rect(&mut s, cx, card_y, 5.0, card_h, *ar, *ag, *ab);
-            draw_text(&mut s, "F2", 8.0, cx + 12.0, card_y + 29.0, 0.29, 0.38, 0.48, label);
+            draw_rect(
+                &mut s,
+                Rect {
+                    x: cx,
+                    y: card_y,
+                    w: card_w,
+                    h: card_h,
+                },
+                Rgb(0.945, 0.965, 0.973),
+            );
+            draw_rect(
+                &mut s,
+                Rect {
+                    x: cx,
+                    y: card_y,
+                    w: 5.0,
+                    h: card_h,
+                },
+                *accent,
+            );
             draw_text(
                 &mut s,
-                "F2",
-                16.0,
+                TextStyle {
+                    font: "F2",
+                    size: 8.0,
+                    color: Rgb(0.29, 0.38, 0.48),
+                },
+                cx + 12.0,
+                card_y + 29.0,
+                label,
+            );
+            draw_text(
+                &mut s,
+                TextStyle {
+                    font: "F2",
+                    size: 16.0,
+                    color: navy,
+                },
                 cx + 12.0,
                 card_y + 10.0,
-                0.086,
-                0.149,
-                0.231,
                 &val.to_string(),
             );
         }
@@ -157,9 +214,18 @@ fn render_page_stream(
     // Table Header Bar (Slate Navy #16263B)
     let header_h = 24.0;
     let header_y = table_top_y - header_h;
-    draw_rect(&mut s, MARGIN, header_y, content_w, header_h, 0.086, 0.149, 0.231);
+    draw_rect(
+        &mut s,
+        Rect {
+            x: MARGIN,
+            y: header_y,
+            w: content_w,
+            h: header_h,
+        },
+        navy,
+    );
 
-    let cols: [(&str, f32); 8] = [
+    let cols: [(&str, f32); 7] = [
         ("REF", MARGIN + 8.0),
         ("DATE / TIME", MARGIN + 92.0),
         ("VISITOR", MARGIN + 206.0),
@@ -167,15 +233,20 @@ fn render_page_stream(
         ("SPECIALIST", MARGIN + 448.0),
         ("PRIORITY", MARGIN + 566.0),
         ("STATUS", MARGIN + 632.0),
-        ("NOTES", MARGIN + 700.0),
     ];
 
     for (label, cx) in &cols {
-        // Notes column sits cleanly inside width; keep compact headers
-        if *label == "NOTES" {
-            continue;
-        }
-        draw_text(&mut s, "F2", 8.5, *cx, header_y + 8.0, 1.0, 1.0, 1.0, label);
+        draw_text(
+            &mut s,
+            TextStyle {
+                font: "F2",
+                size: 8.5,
+                color: white,
+            },
+            *cx,
+            header_y + 8.0,
+            label,
+        );
     }
 
     // Rows
@@ -183,23 +254,40 @@ fn render_page_stream(
     if rows.is_empty() {
         draw_text(
             &mut s,
-            "F1",
-            10.5,
+            TextStyle {
+                font: "F1",
+                size: 10.5,
+                color: Rgb(0.35, 0.44, 0.53),
+            },
             MARGIN + 12.0,
             header_y - 26.0,
-            0.35,
-            0.44,
-            0.53,
             "No scheduled bookings matched the selected export filter.",
         );
     } else {
         for (idx, b) in rows.iter().enumerate() {
             let ry = header_y - row_h * (idx as f32 + 1.0);
             if idx % 2 == 1 {
-                draw_rect(&mut s, MARGIN, ry, content_w, row_h, 0.957, 0.973, 0.984);
+                draw_rect(
+                    &mut s,
+                    Rect {
+                        x: MARGIN,
+                        y: ry,
+                        w: content_w,
+                        h: row_h,
+                    },
+                    Rgb(0.957, 0.973, 0.984),
+                );
             }
-            // Subtle bottom divider line
-            draw_rect(&mut s, MARGIN, ry, content_w, 0.6, 0.827, 0.882, 0.918);
+            draw_rect(
+                &mut s,
+                Rect {
+                    x: MARGIN,
+                    y: ry,
+                    w: content_w,
+                    h: 0.6,
+                },
+                Rgb(0.827, 0.882, 0.918),
+            );
 
             let (dept_name, dept_code, _room) = resolve_department(departments, &b.department_id);
             let spec_name = resolve_specialist(specialists, &b.specialist_id);
@@ -208,106 +296,115 @@ fn render_page_stream(
 
             draw_text(
                 &mut s,
-                "F3",
-                8.0,
+                TextStyle {
+                    font: "F3",
+                    size: 8.0,
+                    color: navy,
+                },
                 cols[0].1,
                 text_y,
-                0.086,
-                0.149,
-                0.231,
                 &truncate_str(&b.reference_code, 14),
             );
             draw_text(
                 &mut s,
-                "F1",
-                8.5,
+                TextStyle {
+                    font: "F1",
+                    size: 8.5,
+                    color: Rgb(0.12, 0.20, 0.30),
+                },
                 cols[1].1,
                 text_y,
-                0.12,
-                0.20,
-                0.30,
                 &truncate_str(&date_time, 20),
             );
             draw_text(
                 &mut s,
-                "F2",
-                8.8,
+                TextStyle {
+                    font: "F2",
+                    size: 8.8,
+                    color: navy,
+                },
                 cols[2].1,
                 text_y,
-                0.086,
-                0.149,
-                0.231,
                 &truncate_str(&b.visitor_name, 22),
             );
             draw_text(
                 &mut s,
-                "F1",
-                8.5,
+                TextStyle {
+                    font: "F1",
+                    size: 8.5,
+                    color: Rgb(0.18, 0.28, 0.39),
+                },
                 cols[3].1,
                 text_y,
-                0.18,
-                0.28,
-                0.39,
                 &truncate_str(&format!("[{dept_code}] {dept_name}"), 21),
             );
             draw_text(
                 &mut s,
-                "F1",
-                8.5,
+                TextStyle {
+                    font: "F1",
+                    size: 8.5,
+                    color: Rgb(0.18, 0.28, 0.39),
+                },
                 cols[4].1,
                 text_y,
-                0.18,
-                0.28,
-                0.39,
                 &truncate_str(spec_name, 20),
             );
             draw_text(
                 &mut s,
-                "F2",
-                8.2,
+                TextStyle {
+                    font: "F2",
+                    size: 8.2,
+                    color: Rgb(0.55, 0.32, 0.05),
+                },
                 cols[5].1,
                 text_y,
-                0.55,
-                0.32,
-                0.05,
                 b.priority.label(),
             );
             draw_text(
                 &mut s,
-                "F2",
-                8.2,
+                TextStyle {
+                    font: "F2",
+                    size: 8.2,
+                    color: Rgb(0.059, 0.48, 0.42),
+                },
                 cols[6].1,
                 text_y,
-                0.059,
-                0.48,
-                0.42,
                 b.status.label(),
             );
         }
     }
 
     // Footer
-    draw_rect(&mut s, MARGIN, 34.0, content_w, 0.8, 0.80, 0.86, 0.90);
+    draw_rect(
+        &mut s,
+        Rect {
+            x: MARGIN,
+            y: 34.0,
+            w: content_w,
+            h: 0.8,
+        },
+        Rgb(0.80, 0.86, 0.90),
+    );
     draw_text(
         &mut s,
-        "F1",
-        8.0,
+        TextStyle {
+            font: "F1",
+            size: 8.0,
+            color: Rgb(0.38, 0.46, 0.55),
+        },
         MARGIN,
         21.0,
-        0.38,
-        0.46,
-        0.55,
         "PulseBay Operations Console  |  Built by Jean Seenivasagam  |  github.com/jeanseenivasagam",
     );
     draw_text(
         &mut s,
-        "F2",
-        8.0,
+        TextStyle {
+            font: "F2",
+            size: 8.0,
+            color: Rgb(0.25, 0.35, 0.46),
+        },
         PAGE_W - MARGIN - 62.0,
         21.0,
-        0.25,
-        0.35,
-        0.46,
         &format!("Page {page_num} of {total_pages}"),
     );
 
@@ -321,7 +418,6 @@ pub fn export_pdf_bytes(
     specialists: &[Specialist],
     meta: &ExportMeta,
 ) -> Result<Vec<u8>, ExportError> {
-    // Page 1 fits 16 rows under KPI strip; subsequent pages fit 19 rows
     let mut pages_rows: Vec<Vec<&Booking>> = Vec::new();
     if bookings.is_empty() {
         pages_rows.push(Vec::new());
@@ -338,15 +434,6 @@ pub fn export_pdf_bytes(
 
     let total_pages = pages_rows.len();
 
-    // Object numbering:
-    // 1: Catalog
-    // 2: Pages
-    // 3: Font F1 (Helvetica)
-    // 4: Font F2 (Helvetica-Bold)
-    // 5: Font F3 (Courier)
-    // For each page i (0..total_pages):
-    //   page_obj_id = 6 + i * 2
-    //   content_obj_id = 7 + i * 2
     let mut objects: Vec<(usize, Vec<u8>)> = Vec::new();
 
     let page_ids: Vec<usize> = (0..total_pages).map(|i| 6 + i * 2).collect();
@@ -402,7 +489,6 @@ pub fn export_pdf_bytes(
         objects.push((content_id, content_obj));
     }
 
-    // Assemble PDF binary + exact XRef byte offsets
     let mut pdf: Vec<u8> = Vec::with_capacity(16384);
     pdf.extend_from_slice(b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
 

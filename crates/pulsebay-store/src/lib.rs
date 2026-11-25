@@ -91,4 +91,36 @@ mod tests {
         let same = store.reschedule_booking(&a.id, "2027-02-10", "09:00");
         assert!(same.is_ok());
     }
+
+    #[test]
+    fn persists_across_reopen_without_re_seeding_duplicates() {
+        let dir = tempdir().unwrap_or_else(|e| panic!("tempdir failed: {e}"));
+        let db_file = dir.path().join("reopen-test.db");
+
+        let initial_count = {
+            let store = BookingStore::open_path(&db_file)
+                .unwrap_or_else(|e| panic!("first open failed: {e}"));
+            let _ = store
+                .create_booking(new_booking("Sasha Novak", "2027-03-10", "11:30"))
+                .unwrap_or_else(|e| panic!("create failed: {e}"));
+            store.list_all().unwrap_or_default().len()
+        };
+
+        // Reopening the same database file must retain Sasha and never duplicate seed rows
+        let reopened = BookingStore::open_path(&db_file)
+            .unwrap_or_else(|e| panic!("second open failed: {e}"));
+        let all = reopened.list_all().unwrap_or_default();
+        assert_eq!(all.len(), initial_count);
+        assert!(all.iter().any(|b| b.visitor_name == "Sasha Novak"));
+
+        // Clear all bookings and confirm reopen still stays empty (initialized_v1 persists)
+        reopened
+            .clear_all_bookings()
+            .unwrap_or_else(|e| panic!("clear failed: {e}"));
+        drop(reopened);
+
+        let third_open = BookingStore::open_path(&db_file)
+            .unwrap_or_else(|e| panic!("third open failed: {e}"));
+        assert!(third_open.list_all().unwrap_or_default().is_empty());
+    }
 }

@@ -91,4 +91,53 @@ mod tests {
         assert!(text.contains("Hannah Okafor"));
         assert!(text.contains("Page 2 of 2"));
     }
+
+    #[test]
+    fn handles_empty_schedules_and_special_characters_safely() {
+        let (_, meta) = sample_fixture();
+        let depts = default_departments();
+        let specs = default_specialists();
+
+        // Empty schedule across all 3 formats
+        let empty_csv = export_csv_bytes(&[], &depts, &specs)
+            .unwrap_or_else(|e| panic!("empty csv failed: {e}"));
+        assert!(empty_csv.starts_with(&[0xEF, 0xBB, 0xBF]));
+        assert!(String::from_utf8_lossy(&empty_csv).contains("Reference,Date,Time"));
+
+        let empty_xlsx = export_xlsx_bytes(&[], &depts, &specs, &meta)
+            .unwrap_or_else(|e| panic!("empty xlsx failed: {e}"));
+        assert_eq!(&empty_xlsx[0..4], &[0x50, 0x4B, 0x03, 0x04]);
+
+        let empty_pdf = export_pdf_bytes(&[], &depts, &specs, &meta)
+            .unwrap_or_else(|e| panic!("empty pdf failed: {e}"));
+        let empty_pdf_str = String::from_utf8_lossy(&empty_pdf);
+        assert!(empty_pdf_str.contains("No scheduled bookings matched"));
+        assert!(empty_pdf_str.contains("Page 1 of 1"));
+
+        // Special characters: commas, quotes, parentheses, backslashes, em-dashes
+        let (mut bookings, _) = sample_fixture();
+        bookings[0].visitor_name = "Sam (Jr.) \\ Test".into();
+        bookings[0].protocol_notes = "Notes with, commas, \"quotes\" — and (parens)".into();
+
+        let csv_bytes = export_csv_bytes(&bookings[..1], &depts, &specs)
+            .unwrap_or_else(|e| panic!("special csv failed: {e}"));
+        let mut reader = csv::Reader::from_reader(&csv_bytes[3..]);
+        let rows: Vec<_> = reader
+            .records()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_or_else(|e| panic!("csv roundtrip parse failed: {e}"));
+        assert_eq!(&rows[0][4], "Sam (Jr.) \\ Test");
+        assert_eq!(&rows[0][12], "Notes with, commas, \"quotes\" — and (parens)");
+
+        let pdf_bytes = export_pdf_bytes(&bookings[..1], &depts, &specs, &meta)
+            .unwrap_or_else(|e| panic!("special pdf failed: {e}"));
+        let pdf_str = String::from_utf8_lossy(&pdf_bytes);
+        assert!(pdf_str.contains("\\(Jr.\\)"));
+        assert!(pdf_str.contains("\\\\"));
+        assert!(pdf_str.trim_end().ends_with("%%EOF"));
+
+        let xlsx_bytes = export_xlsx_bytes(&bookings[..1], &depts, &specs, &meta)
+            .unwrap_or_else(|e| panic!("special xlsx failed: {e}"));
+        assert_eq!(&xlsx_bytes[0..4], &[0x50, 0x4B, 0x03, 0x04]);
+    }
 }

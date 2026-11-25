@@ -1431,6 +1431,8 @@ function bindEvents(root: HTMLElement): void {
       try {
         state.bookings = await PulseBayBackend.resetSampleData();
         state.confirmedBooking = null;
+        state.formError = null;
+        state.rosterFilter = {};
         state.selectedSlot = pickFirstAvailableSlot();
         render();
         showToast('Sample schedule restored around today.');

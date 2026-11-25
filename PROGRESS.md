@@ -1,12 +1,21 @@
 # PulseBay Build Progress
 
-- [x] Phase 1: Reference codebase & `Ranrar/rustic-prompt` workflow breakdown
-- [x] Phase 2: Approved complete overhaul blueprint (`PulseBay` — Rust + Tauri v2 + Companion Web Demo + Windows Installer)
-- [x] Clean-slate Git repository initialized in `apps/pulsebay/` (zero inherited history or remotes, clean `.gitignore`)
-- [x] Rust Cargo workspace crates implemented (`pulsebay-core`, `pulsebay-store`, `pulsebay-export`)
-- [x] Rust workspace unit tests verified (`cargo test --workspace`: 9 passed, 0 failed, 0 warnings)
-- [x] Two Point Hospital-inspired console UI & Companion Web Demo built (`apps/web-ui`, `tsc --noEmit` + Vite production build)
-- [x] Live browser visual & functional QA completed (Calendar booking, Shift Roster check-in, Excel/CSV/PDF exports, Top-Layer modal fix verified)
-- [x] Tauri v2 native Windows desktop executable (`pulsebay-desktop.exe`) and per-user NSIS installer (`PulseBay_0.1.0_x64-setup.exe`, 5.30 MiB) built cleanly
-- [x] Release `SHA256SUMS.txt` checksums and Windows safety/SmartScreen installation guide (`docs/INSTALL_WINDOWS.md`) generated
-- [ ] User review & sign-off (before any GitHub push or Netlify deployment)
+- [x] **Phase 1:** Reference codebase & workflow pattern analysis (`industry-landing-pages`, `Ranrar/rustic-prompt`, `addyosmani/agent-skills`)
+- [x] **Phase 2:** Approved complete overhaul blueprint (`PulseBay` — Rust + Tauri v2 + Companion Web Demo + Windows Installer)
+- [x] **Phase 3:** Full implementation
+  - Clean-slate Git repository initialized in `apps/pulsebay/` (zero inherited history or remotes, strict `.gitignore`)
+  - Modular Rust Cargo workspace (`pulsebay-core`, `pulsebay-store`, `pulsebay-export`) with `#![forbid(unsafe_code)]`
+  - Two Point Hospital-inspired console UI & Companion Web Demo (`apps/web-ui`) with interactive calendar booking, Shift Roster, and multi-format exports (`.xlsx`, `.csv`, `.pdf`)
+  - Tauri v2 native Windows desktop host (`apps/desktop/src-tauri`) with native Save-As file dialogs and per-user NSIS installer config
+- [x] **Phase 4:** Q&A testing, edge cases & polish
+  - Expanded Rust workspace test suite: **12/12 unit & persistence tests passing** (leap-year/invalid dates, bad emails, slot conflicts, SQLite reopen without duplicate seeding, empty exports, special-character CSV/XLSX/PDF escaping)
+  - Strict `cargo clippy --workspace --all-targets -- -D warnings`: **0 warnings** (refactored PDF helpers into typed `Rect`/`Rgb`/`TextStyle` structs with zero `#[allow]` suppressions)
+  - Automated browser exporter byte-level tests (`scripts/test-browser-exporters.mjs`): **PASS** (UTF-8 BOM CSV, OOXML ZIP `.xlsx` with CRC32 + EOCD, multi-page `%PDF-1.4`)
+  - Deep live browser QA (`1280×860` desktop + `390×844` mobile): **0 console errors, 0 failed network requests, 0px horizontal mobile overflow**
+  - Defects found & resolved: Top-Layer `<dialog>.showModal()` stacking & Escape/backdrop dismissal, single-row demo banner, `Reset demo data` clearing stale validation alerts & roster filters, and non-sticky compact mobile header at `<= 640px`
+- [x] **Phase 5:** Production readiness & documentation
+  - Rebuilt release Web Demo (`18.14 kB` gzipped JS, `4.68 kB` gzipped CSS), release `pulsebay-desktop.exe`, and per-user `PulseBay_0.1.0_x64-setup.exe` (`5.30 MiB`)
+  - Generated verified `SHA256SUMS.txt` checksums and transparent SmartScreen/uninstaller guide (`docs/INSTALL_WINDOWS.md`)
+  - Captured and embedded 4 crisp desktop screenshots in `README.md` (`docs/screenshots/`)
+  - Verified `.gitignore` hygiene (zero `.env`, tokens, `target/`, `node_modules/`, `dist/`, or `release-artifacts/` tracked)
+- [ ] **Pre-Publish Gate:** Awaiting user review and explicit sign-off before any GitHub push or Netlify deployment

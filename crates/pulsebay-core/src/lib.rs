@@ -112,4 +112,52 @@ mod tests {
         assert_eq!(summary.confirmed, 2);
         assert_eq!(summary.urgent, 1);
     }
+
+    #[test]
+    fn rejects_invalid_dates_durations_names_and_catalog_ids() {
+        let depts = default_departments();
+        let specs = default_specialists();
+
+        // Non-leap-year Feb 29 must fail date validation
+        let bad_date = sample_input("2026-02-29", "10:00");
+        assert!(matches!(
+            create_validated_booking(bad_date, &depts, &specs, &[]),
+            Err(CoreError::InvalidDate(_))
+        ));
+
+        // Leap year Feb 29 must succeed
+        let leap_date = sample_input("2028-02-29", "10:00");
+        assert!(create_validated_booking(leap_date, &depts, &specs, &[]).is_ok());
+
+        // Single-character or whitespace name fails
+        let mut short_name = sample_input("2026-11-26", "10:00");
+        short_name.visitor_name = "  A ".into();
+        assert_eq!(
+            create_validated_booking(short_name, &depts, &specs, &[]),
+            Err(CoreError::InvalidVisitorName)
+        );
+
+        // Unsupported duration fails
+        let mut bad_dur = sample_input("2026-11-26", "10:00");
+        bad_dur.duration_mins = 20;
+        assert_eq!(
+            create_validated_booking(bad_dur, &depts, &specs, &[]),
+            Err(CoreError::InvalidDuration(20))
+        );
+
+        // Unknown department and specialist fail cleanly
+        let mut bad_dept = sample_input("2026-11-26", "10:00");
+        bad_dept.department_id = "nonexistent-wing".into();
+        assert!(matches!(
+            create_validated_booking(bad_dept, &depts, &specs, &[]),
+            Err(CoreError::UnknownDepartment(_))
+        ));
+
+        let mut bad_spec = sample_input("2026-11-26", "10:00");
+        bad_spec.specialist_id = "dr-nobody".into();
+        assert!(matches!(
+            create_validated_booking(bad_spec, &depts, &specs, &[]),
+            Err(CoreError::UnknownSpecialist(_))
+        ));
+    }
 }
