@@ -1465,6 +1465,44 @@ html[data-runtime='desktop'] .select {
   border-radius: 9px;
 }
 
+html[data-runtime='desktop'] .search-wrap .icon {
+  left: 0.68rem;
+  width: 15px;
+  height: 15px;
+}
+
+html[data-runtime='desktop'] .search-wrap .input {
+  padding-left: 2.2rem;
+}
+
+html[data-runtime='desktop'] .roster-table {
+  font-size: 0.83rem;
+}
+
+html[data-runtime='desktop'] .roster-table th {
+  padding: 0.52rem 0.6rem;
+  font-size: 0.78rem;
+}
+
+html[data-runtime='desktop'] .roster-table td {
+  padding: 0.5rem 0.6rem;
+}
+
+html[data-runtime='desktop'] .notes-preview {
+  max-width: 210px;
+}
+
+html[data-runtime='desktop'] .row-actions {
+  gap: 0.28rem;
+  flex-wrap: nowrap;
+}
+
+html[data-runtime='desktop'] .row-actions .btn--sm {
+  min-height: 30px;
+  padding: 0.24rem 0.54rem;
+  font-size: 0.77rem;
+}
+
 html[data-runtime='desktop'] .textarea {
   min-height: 42px;
   padding: 0.32rem 0.6rem;

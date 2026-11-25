@@ -18,6 +18,9 @@ Designed with a playful-yet-crisp clinical console visual system (rounded tactil
 ### Shift Roster & Live Status Transitions
 ![PulseBay Shift Roster](./docs/screenshots/shift-roster.png)
 
+### Protocol Checklist & Visit Notes Editor
+![PulseBay Protocol Checklist and Visit Notes Modal](./docs/screenshots/notes-checklist-modal.png)
+
 ### Multi-Format Export Studio (`.xlsx`, `.csv`, `.pdf`)
 ![PulseBay Multi-Format Export Studio](./docs/screenshots/export-studio.png)
 

@@ -14,7 +14,7 @@
         "title": "PulseBay — Operations & Booking Console",
         "width": 1360,
         "height": 880,
-        "minWidth": 1120,
+        "minWidth": 1240,
         "minHeight": 740,
         "resizable": true,
         "center": true

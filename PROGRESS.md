@@ -28,4 +28,8 @@
   - Aligned SQLite database path with Tauri's standard `%APPDATA%\io.jeanseenivasagam.pulsebay\pulsebay.db` (matching NSIS's optional uninstall "Delete app data" folder) and added automatic zero-loss migration (`BookingStore::open_with_migration`) from early `0.1.0` `ProjectDirs` paths (verified by Rust unit test; 13/13 tests passing, 0 Clippy warnings)
   - Hardened `tauri.conf.json` (`allowDowngrades: false`, `homepage` URL in Windows Installed Apps) and synced `v0.1.1` from `app.package_info().version` so in-app UI and Windows Installed Apps always display the same version
   - Updated `README.md`, `docs/INSTALL_WINDOWS.md`, and `scripts/generate-checksums.ps1` (dynamic version detection) and rebuilt `PulseBay_0.1.1_x64-setup.exe` + `PulseBay_0.1.1_x64-portable.zip` + `SHA256SUMS.txt`
-- [ ] **Pre-Publish Gate:** Awaiting user review and explicit sign-off before any GitHub push or Netlify deployment
+- [x] **Shift Roster Layout Polish (`v0.1.1`):**
+  - Fixed desktop `.search-wrap .input` specificity override (`padding-left: 2.2rem`, 15px icon) so the magnifying-glass icon sits cleanly beside placeholder and typed text with zero overlap
+  - Raised minimum desktop window width to `1240×740` (`tauri.conf.json`) and tuned desktop Shift Roster table column padding/action controls—verified **0px horizontal scrollbar** and **0 outer scrollbars** at both `1240×740` and `1360×880` with **0 console errors**
+  - Updated `README.md` with 5 verified desktop screenshots (including the new **Protocol Checklist & Visit Notes** modal) and rebuilt `PulseBay_0.1.1_x64-setup.exe`, `pulsebay-desktop.exe`, `PulseBay_0.1.1_x64-portable.zip`, and `SHA256SUMS.txt`
+- [ ] **Pre-Publish Gate:** Awaiting user review and explicit sign-off before creating the clean public GitHub repo, tagged Release, and Netlify web demo deployment
